@@ -1,0 +1,256 @@
+:root {
+    --bg-color: #f1f5f9; 
+    --text-color: #0f172a; 
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0; 
+    --primary-accent: #4f46e5; 
+    --primary-accent-hover: #4338ca;
+    --red-seal-color: #B91C1C;
+}
+
+html.dark {
+    --bg-color: #0f172a; 
+    --text-color: #f1f5f9; 
+    --card-bg: #1e293b;
+    --border-color: #334155;
+}
+
+body { 
+    background-color: var(--bg-color); 
+    color: var(--text-color); 
+    transition: background-color 0.3s, color 0.3s; 
+    font-family: 'Inter', sans-serif; 
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+.card { 
+    background-color: var(--card-bg); 
+    border: 1px solid var(--border-color); 
+}
+
+.page { 
+    display: none; 
+    animation: fadeIn 0.5s; 
+}
+
+.page.active { 
+    display: block; 
+}
+
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(10px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+.rtl { 
+    direction: rtl; 
+}
+
+.nav-btn.active { 
+    border-color: var(--primary-accent) !important; 
+    color: var(--primary-accent); 
+}
+
+.choice { 
+    cursor: pointer; 
+    border: 2px solid var(--border-color); 
+    transition: all .2s; 
+}
+
+.choice:hover, .choice.highlight { 
+    border-color: var(--primary-accent); 
+    background-color: rgba(79, 70, 229, 0.1); 
+}
+
+.choice.selected { 
+    border-color: var(--primary-accent); 
+    background-color: rgba(79, 70, 229, 0.2); 
+    font-weight: 600; 
+}
+
+.choice.correct { 
+    background-color: #dcfce7; 
+    border-color: #22c55e; 
+}
+
+.choice.incorrect { 
+    background-color: #fee2e2; 
+    border-color: #ef4444; 
+}
+
+html.dark .choice.correct { 
+    background-color: #166534; 
+}
+
+html.dark .choice.incorrect { 
+    background-color: #991b1b; 
+}
+
+.btn-primary { 
+    background-color: var(--primary-accent); 
+    color: white; 
+    font-weight: 600; 
+    border-radius: 0.5rem; 
+    transition: background-color 0.2s; 
+    padding: 0.75rem 1.5rem; 
+}
+
+.btn-primary:hover { 
+    background-color: var(--primary-accent-hover); 
+}
+
+.btn-secondary { 
+    background-color: #64748b; 
+    color: white; 
+    font-weight: 600; 
+    border-radius: 0.5rem; 
+    transition: background-color 0.2s; 
+    padding: 0.5rem 1rem;
+}
+
+.btn-secondary:hover { 
+    background-color: #475569; 
+}
+
+.btn-disabled { 
+    background-color: #94a3b8; 
+    cursor: not-allowed; 
+}
+
+#review-list details[open], #summary-question-list details[open] { 
+    background-color: rgba(79, 70, 229, 0.05); 
+}
+
+html.dark #review-list details[open], html.dark #summary-question-list details[open] { 
+    background-color: rgba(79, 70, 229, 0.1); 
+}
+
+.completed-section { 
+    background-color: #eefbe7 !important; 
+    color: #3f6212; 
+    font-weight: 600;
+}
+
+html.dark .completed-section { 
+    background-color: #1a2e05 !important; 
+    color: #a3e635; 
+}
+
+.performance-item .font-semibold {
+    color: var(--text-color);
+    font-size: 0.8rem;
+    padding-bottom: 2px;
+}
+
+.stats-bar {
+    background-color: var(--border-color);
+    border-radius: 0.25rem;
+    overflow: hidden;
+    height: 8px;
+}
+
+.stats-bar-fill {
+    height: 100%;
+    background-image: linear-gradient(to right, #6366f1, #818cf8);
+    transition: width 0.5s ease-in-out;
+    border-radius: 0.25rem;
+}
+
+.mode-tag {
+    display: inline-block;
+    padding: 0.125rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    text-transform: capitalize;
+    line-height: 1.2;
+}
+
+.mode-study {
+    background-color: #e0e7ff; 
+    color: #4338ca; 
+}
+html.dark .mode-study {
+    background-color: #3730a3; 
+    color: #c7d2fe; 
+}
+
+.mode-quiz {
+    background-color: #ffedd5; 
+    color: #c2410c; 
+}
+html.dark .mode-quiz {
+    background-color: #9a3412; 
+    color: #fed7aa; 
+}
+
+.mode-assessment {
+    background-color: #fce7f3; 
+    color: #be185d; 
+}
+html.dark .mode-assessment {
+    background-color: #831843; 
+    color: #fbcfe8; 
+}
+
+.report-tab {
+    border-color: transparent;
+    color: #64748b; 
+}
+html.dark .report-tab {
+    color: #94a3b8; 
+}
+.report-tab.active {
+    border-color: var(--primary-accent);
+    color: var(--primary-accent);
+}
+
+#assessment-list .card {
+    transition: border-color 0.2s;
+}
+
+#assessment-list .card:hover {
+    border-color: var(--primary-accent);
+}
+
+.recent-activity-item {
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.recent-activity-item:hover {
+    border-color: var(--primary-accent);
+}
+
+.glossary-term-highlight {
+    border-bottom: 2px dotted var(--primary-accent);
+    cursor: help;
+    color: var(--primary-accent);
+    font-weight: 600;
+}
+
+#term-popup {
+    position: absolute;
+    z-index: 100;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    max-width: 350px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+#glossary-modal {
+    animation: fadeIn 0.3s ease-out;
+}
+
+#glossary-alphabet-filter button {
+    transition: all 0.2s;
+}
+#glossary-alphabet-filter button.active {
+    background-color: var(--primary-accent);
+    color: white;
+}
+

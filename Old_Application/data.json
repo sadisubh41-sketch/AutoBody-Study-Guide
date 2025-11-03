@@ -1,0 +1,168 @@
+{
+  "codebook": {
+    "qTypes": {
+      "KR": {
+        "en": "Knowledge & Recall",
+        "ar": "معرفة واستدعاء"
+      },
+      "PA": {
+        "en": "Procedural & Application",
+        "ar": "إجرائي وتطبيقي"
+      },
+      "PS": {
+        "en": "Problem-Solving & Critical Thinking",
+        "ar": "حل المشكلات والتفكير النقدي"
+      }
+    },
+    "mwa": {
+      "A": {
+        "en": "Performs common occupational skills",
+        "ar": "ينفّذ المهارات المهنية الشائعة"
+      },
+      "B": {
+        "en": "Repairs frame and structural components",
+        "ar": "يصلح الإطار والمكوّنات الهيكلية"
+      },
+      "C": {
+        "en": "Repairs non-structural outer body panels and related components",
+        "ar": "يصلح ألواح الهيكل الخارجية غير الهيكلية والمكوّنات المرتبطة"
+      },
+      "D": {
+        "en": "Repairs mechanical, electrical and alternative-fuel system components",
+        "ar": "يصلح المكوّنات الميكانيكية والكهربائية وأنظمة الوقود البديلة"
+      },
+      "E": {
+        "en": "Repairs interior components and services restraint systems",
+        "ar": "يصلح مكوّنات المقصورة ويُخدّم أنظمة التثبيت"
+      },
+      "F": {
+        "en": "Performs refinishing procedures",
+        "ar": "ينفّذ إجراءات إعادة الطلاء"
+      },
+      "G": {
+        "en": "Performs detailing and cleaning",
+        "ar": "ينفّذ التجميـل والتنظيف"
+      }
+    },
+    "tasks": {
+      "A-1": {
+        "en": "Performs safety-related functions",
+        "ar": "يؤدي وظائف السلامة"
+      },
+      "A-2": {
+        "en": "Uses and maintains tools and equipment",
+        "ar": "يستخدم ويصون الأدوات والمعدات"
+      },
+      "A-3": {
+        "en": "Uses and maintains welding equipment",
+        "ar": "يستخدم ويصون معدات اللحام"
+      },
+      "A-4": {
+        "en": "Organizes work and uses documentation",
+        "ar": "ينظّم العمل ويستخدم الوثائق"
+      },
+      "A-5": {
+        "en": "Uses communication and mentoring techniques",
+        "ar": "يستخدم أساليب التواصل والإرشاد"
+      },
+      "A-6": {
+        "en": "Removes and installs trim and hardware",
+        "ar": "يفكّ ويثبت الزينة والملحقات"
+      },
+      "A-7": {
+        "en": "Performs final inspections",
+        "ar": "يجري الفحوصات النهائية"
+      },
+      "A-8": {
+        "en": "Applies corrosion protection and sound-deadening materials",
+        "ar": "يطبق مواد الحماية من التآكل وعزل الصوت"
+      },
+      "B-9": {
+        "en": "Prepares for repair and replacement of structural components",
+        "ar": "يُحَضِّر لإصلاح واستبدال المكوّنات الهيكلية"
+      },
+      "B-10": {
+        "en": "Repairs, removes and installs structural components",
+        "ar": "يُصلح ويفكّ ويثبّت المكوّنات الهيكلية"
+      },
+      "B-11": {
+        "en": "Removes, installs and repairs structural & laminated glass",
+        "ar": "يفكّ ويثبّت ويُصلح الزجاج الهيكلي والمصفح"
+      },
+      "C-12": {
+        "en": "Removes, repairs and installs metal panels and components",
+        "ar": "يفكّ ويُصلح ويثبّت ألواح ومكوّنات معدنية"
+      },
+      "C-13": {
+        "en": "Removes, repairs and installs plastic/composite panels and components",
+        "ar": "يفكّ ويُصلح ويثبّت الألواح/المكوّنات البلاستيكية والمركبة"
+      },
+      "C-14": {
+        "en": "Removes and installs non-structural glass",
+        "ar": "يفكّ ويثبّت الزجاج غير الهيكلي"
+      },
+      "D-15": {
+        "en": "Deactivates and reactivates alternative-fuel systems",
+        "ar": "يعطّل ويعيد تفعيل أنظمة الوقود البديلة"
+      },
+      "D-16": {
+        "en": "Removes and installs mechanical components",
+        "ar": "يفكّ ويثبّت المكوّنات الميكانيكية"
+      },
+      "D-17": {
+        "en": "Removes, repairs and installs electrical/electronic components",
+        "ar": "يفكّ ويُصلح ويثبّت المكوّنات الكهربائية/الإلكترونية"
+      },
+      "E-18": {
+        "en": "Repairs and replaces interior components",
+        "ar": "يُصلح ويستبدل مكوّنات المقصورة"
+      },
+      "E-19": {
+        "en": "Services supplemental restraint systems (SRS)",
+        "ar": "يُخدّم أنظمة التثبيت الإضافية (الوسائد الهوائية وأحزمة الأمان)"
+      },
+      "F-20": {
+        "en": "Prepares surface",
+        "ar": "يُحضّر السطح"
+      },
+      "F-21": {
+        "en": "Uses repair materials",
+        "ar": "يستخدم مواد الإصلاح"
+      },
+      "F-22": {
+        "en": "Prepares refinishing equipment",
+        "ar": "يُحضّر معدات الطلاء"
+      },
+      "F-23": {
+        "en": "Prepares refinishing materials",
+        "ar": "يُحضّر مواد الطلاء"
+      },
+      "F-24": {
+        "en": "Applies refinishing materials",
+        "ar": "يطبّق مواد الطلاء"
+      },
+      "F-25": {
+        "en": "Performs post-refinishing functions",
+        "ar": "ينفّذ إجراءات ما بعد الطلاء"
+      },
+      "G-26": {
+        "en": "Details exterior",
+        "ar": "يجمل المظهر الخارجي"
+      },
+      "G-27": {
+        "en": "Cleans vehicle",
+        "ar": "ينظّف المركبة"
+      }
+    }
+  },
+  "bookFiles": [
+    "RED_SEAL_Sample_Questions.json",
+    "book-1.json",
+    "book-2.json",
+    "book-3.json",
+    "book-4.json",
+    "Motorbooks_Workshop_50MCQ.json",
+    "SAIT_Year1.json"
+  ],
+  "glossaryFile": "ABTerms_index.json"
+}

@@ -1,0 +1,105 @@
+{
+  "comment_overall": "This file is a template for creating new book content. Each book should be in its own JSON file and listed in the 'bookFiles' array in 'data.json'.",
+  "id": "bookX",
+  "comment_id": "A unique identifier for the book, e.g., 'book1', 'book2'. This is used to link questions to the book.",
+  "title": {
+    "en": "Book X Title",
+    "ar": "عنوان الكتاب X",
+    "comment_title": "The title of the book in both English and Arabic."
+  },
+  "sections": [
+    {
+      "comment_section": "A section can be either a study subject or a quiz. The 'id' determines its type.",
+      "id": "bXsY",
+      "comment_section_id": "Unique ID for the section within this book. 'bX' for book X, 'sY' for subject Y. Example: 'b1s1', 'b1s2'.",
+      "title": {
+        "en": "Book X, Subject Y Title",
+        "ar": "عنوان الموضوع Y من الكتاب X"
+      },
+      "questions": [
+        {
+          "comment_question": "Each object in this array is a single question.",
+          "uid": "BXtYmZqW",
+          "comment_uid": "CRITICAL: The Unique Identifier for the question. Structure: 'B' + Book# (t) + MWA_Letter (m) + Task# (Y) + 'q' + Question# (W). Example for Book 1, MWA A, Task A1.01, Question 1 would be 'B1AA1.01q1'. This structure is essential for filtering and reporting.",
+          "question": {
+            "en": "This is the English version of the question text.",
+            "ar": "هذه هي النسخة العربية من نص السؤال."
+          },
+          "choices": [
+            {
+              "en": "Choice A in English.",
+              "ar": "الاختيار أ باللغة العربية."
+            },
+            {
+              "en": "Choice B in English.",
+              "ar": "الاختيار ب باللغة العربية."
+            },
+            {
+              "en": "Choice C in English.",
+              "ar": "الاختيار ج باللغة العربية."
+            },
+            {
+              "en": "Choice D in English.",
+              "ar": "الاختيار د باللغة العربية."
+            }
+          ],
+          "comment_choices": "An array of 4 possible answers.",
+          "correctAnswerIndex": 0,
+          "comment_correctAnswerIndex": "The index of the correct answer in the 'choices' array. It is zero-based (0 for A, 1 for B, 2 for C, 3 for D).",
+          "explanation": {
+            "en": "Detailed explanation for why the correct answer is correct, in English.",
+            "ar": "شرح مفصل لسبب صحة الإجابة الصحيحة، باللغة العربية."
+          },
+          "classification": {
+            "mwa": "A",
+            "task": "A1.01",
+            "objective": "A1.01.01",
+            "comment_classification": "These codes MUST correspond to the keys in the 'codebook' section of 'data.json' for correct reporting."
+          },
+          "type": "knowledge",
+          "comment_type": "The 'type' field should correspond to a key in the 'qTypes' object in 'data.json' (e.g., 'knowledge', 'procedural')."
+        }
+      ]
+    },
+    {
+      "id": "bXqzY",
+      "comment_quiz_section": "For quizzes, the section 'id' MUST start with 'qz'. Example: 'b1qz1'.",
+      "title": {
+        "en": "Book X, Quiz Y Title",
+        "ar": "عنوان الاختبار Y من الكتاب X"
+      },
+      "questions": [
+        {
+          "uid": "BXtYmZqW_quiz",
+          "comment_quiz_uid": "It's good practice to add a suffix like '_quiz' to distinguish quiz questions if they are duplicates of study questions, but it's not required.",
+          "question": {
+            "en": "This is a quiz question.",
+            "ar": "هذا سؤال اختبار."
+          },
+          "choices": [
+            {
+              "en": "Choice A",
+              "ar": "الاختيار أ"
+            },
+            {
+              "en": "Choice B",
+              "ar": "الاختيار ب"
+            }
+          ],
+          "correctAnswerIndex": 1,
+          "explanation": {
+            "en": "Explanation for the quiz question.",
+            "ar": "شرح لسؤال الاختبار."
+          },
+          "classification": {
+            "mwa": "B",
+            "task": "B2.01",
+            "objective": "B2.01.01"
+          },
+          "type": "procedural"
+        }
+      ]
+    }
+  ]
+}
+
