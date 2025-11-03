@@ -1,0 +1,168 @@
+{
+  "codebook": {
+    "qTypes": {
+      "KR": {
+        "en": "Knowledge & Recall",
+        "ar": "\u0645\u0639\u0631\u0641\u0629 \u0648\u0627\u0633\u062a\u062f\u0639\u0627\u0621"
+      },
+      "PA": {
+        "en": "Procedural & Application",
+        "ar": "\u0625\u062c\u0631\u0627\u0626\u064a \u0648\u062a\u0637\u0628\u064a\u0642\u064a"
+      },
+      "PS": {
+        "en": "Problem-Solving & Critical Thinking",
+        "ar": "\u062d\u0644 \u0627\u0644\u0645\u0634\u0643\u0644\u0627\u062a \u0648\u0627\u0644\u062a\u0641\u0643\u064a\u0631 \u0627\u0644\u0646\u0642\u062f\u064a"
+      }
+    },
+    "mwa": {
+      "A": {
+        "en": "Performs common occupational skills",
+        "ar": "\u064a\u0646\u0641\u0651\u0630 \u0627\u0644\u0645\u0647\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0647\u0646\u064a\u0629 \u0627\u0644\u0634\u0627\u0626\u0639\u0629"
+      },
+      "B": {
+        "en": "Repairs frame and structural components",
+        "ar": "\u064a\u0635\u0644\u062d \u0627\u0644\u0625\u0637\u0627\u0631 \u0648\u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0647\u064a\u0643\u0644\u064a\u0629"
+      },
+      "C": {
+        "en": "Repairs non-structural outer body panels and related components",
+        "ar": "\u064a\u0635\u0644\u062d \u0623\u0644\u0648\u0627\u062d \u0627\u0644\u0647\u064a\u0643\u0644 \u0627\u0644\u062e\u0627\u0631\u062c\u064a\u0629 \u063a\u064a\u0631 \u0627\u0644\u0647\u064a\u0643\u0644\u064a\u0629 \u0648\u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0645\u0631\u062a\u0628\u0637\u0629"
+      },
+      "D": {
+        "en": "Repairs mechanical, electrical and alternative-fuel system components",
+        "ar": "\u064a\u0635\u0644\u062d \u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0645\u064a\u0643\u0627\u0646\u064a\u0643\u064a\u0629 \u0648\u0627\u0644\u0643\u0647\u0631\u0628\u0627\u0626\u064a\u0629 \u0648\u0623\u0646\u0638\u0645\u0629 \u0627\u0644\u0648\u0642\u0648\u062f \u0627\u0644\u0628\u062f\u064a\u0644\u0629"
+      },
+      "E": {
+        "en": "Repairs interior components and services restraint systems",
+        "ar": "\u064a\u0635\u0644\u062d \u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0645\u0642\u0635\u0648\u0631\u0629 \u0648\u064a\u064f\u062e\u062f\u0651\u0645 \u0623\u0646\u0638\u0645\u0629 \u0627\u0644\u062a\u062b\u0628\u064a\u062a"
+      },
+      "F": {
+        "en": "Performs refinishing procedures",
+        "ar": "\u064a\u0646\u0641\u0651\u0630 \u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0637\u0644\u0627\u0621"
+      },
+      "G": {
+        "en": "Performs detailing and cleaning",
+        "ar": "\u064a\u0646\u0641\u0651\u0630 \u0627\u0644\u062a\u062c\u0645\u064a\u0640\u0644 \u0648\u0627\u0644\u062a\u0646\u0638\u064a\u0641"
+      }
+    },
+    "tasks": {
+      "A-1": {
+        "en": "Performs safety-related functions",
+        "ar": "\u064a\u0624\u062f\u064a \u0648\u0638\u0627\u0626\u0641 \u0627\u0644\u0633\u0644\u0627\u0645\u0629"
+      },
+      "A-2": {
+        "en": "Uses and maintains tools and equipment",
+        "ar": "\u064a\u0633\u062a\u062e\u062f\u0645 \u0648\u064a\u0635\u0648\u0646 \u0627\u0644\u0623\u062f\u0648\u0627\u062a \u0648\u0627\u0644\u0645\u0639\u062f\u0627\u062a"
+      },
+      "A-3": {
+        "en": "Uses and maintains welding equipment",
+        "ar": "\u064a\u0633\u062a\u062e\u062f\u0645 \u0648\u064a\u0635\u0648\u0646 \u0645\u0639\u062f\u0627\u062a \u0627\u0644\u0644\u062d\u0627\u0645"
+      },
+      "A-4": {
+        "en": "Organizes work and uses documentation",
+        "ar": "\u064a\u0646\u0638\u0651\u0645 \u0627\u0644\u0639\u0645\u0644 \u0648\u064a\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0648\u062b\u0627\u0626\u0642"
+      },
+      "A-5": {
+        "en": "Uses communication and mentoring techniques",
+        "ar": "\u064a\u0633\u062a\u062e\u062f\u0645 \u0623\u0633\u0627\u0644\u064a\u0628 \u0627\u0644\u062a\u0648\u0627\u0635\u0644 \u0648\u0627\u0644\u0625\u0631\u0634\u0627\u062f"
+      },
+      "A-6": {
+        "en": "Removes and installs trim and hardware",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u062b\u0628\u062a \u0627\u0644\u0632\u064a\u0646\u0629 \u0648\u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a"
+      },
+      "A-7": {
+        "en": "Performs final inspections",
+        "ar": "\u064a\u062c\u0631\u064a \u0627\u0644\u0641\u062d\u0648\u0635\u0627\u062a \u0627\u0644\u0646\u0647\u0627\u0626\u064a\u0629"
+      },
+      "A-8": {
+        "en": "Applies corrosion protection and sound-deadening materials",
+        "ar": "\u064a\u0637\u0628\u0642 \u0645\u0648\u0627\u062f \u0627\u0644\u062d\u0645\u0627\u064a\u0629 \u0645\u0646 \u0627\u0644\u062a\u0622\u0643\u0644 \u0648\u0639\u0632\u0644 \u0627\u0644\u0635\u0648\u062a"
+      },
+      "B-9": {
+        "en": "Prepares for repair and replacement of structural components",
+        "ar": "\u064a\u064f\u062d\u064e\u0636\u0650\u0651\u0631 \u0644\u0625\u0635\u0644\u0627\u062d \u0648\u0627\u0633\u062a\u0628\u062f\u0627\u0644 \u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0647\u064a\u0643\u0644\u064a\u0629"
+      },
+      "B-10": {
+        "en": "Repairs, removes and installs structural components",
+        "ar": "\u064a\u064f\u0635\u0644\u062d \u0648\u064a\u0641\u0643\u0651 \u0648\u064a\u062b\u0628\u0651\u062a \u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0647\u064a\u0643\u0644\u064a\u0629"
+      },
+      "B-11": {
+        "en": "Removes, installs and repairs structural & laminated glass",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u062b\u0628\u0651\u062a \u0648\u064a\u064f\u0635\u0644\u062d \u0627\u0644\u0632\u062c\u0627\u062c \u0627\u0644\u0647\u064a\u0643\u0644\u064a \u0648\u0627\u0644\u0645\u0635\u0641\u062d"
+      },
+      "C-12": {
+        "en": "Removes, repairs and installs metal panels and components",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u064f\u0635\u0644\u062d \u0648\u064a\u062b\u0628\u0651\u062a \u0623\u0644\u0648\u0627\u062d \u0648\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0645\u0639\u062f\u0646\u064a\u0629"
+      },
+      "C-13": {
+        "en": "Removes, repairs and installs plastic/composite panels and components",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u064f\u0635\u0644\u062d \u0648\u064a\u062b\u0628\u0651\u062a \u0627\u0644\u0623\u0644\u0648\u0627\u062d/\u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0628\u0644\u0627\u0633\u062a\u064a\u0643\u064a\u0629 \u0648\u0627\u0644\u0645\u0631\u0643\u0628\u0629"
+      },
+      "C-14": {
+        "en": "Removes and installs non-structural glass",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u062b\u0628\u0651\u062a \u0627\u0644\u0632\u062c\u0627\u062c \u063a\u064a\u0631 \u0627\u0644\u0647\u064a\u0643\u0644\u064a"
+      },
+      "D-15": {
+        "en": "Deactivates and reactivates alternative-fuel systems",
+        "ar": "\u064a\u0639\u0637\u0651\u0644 \u0648\u064a\u0639\u064a\u062f \u062a\u0641\u0639\u064a\u0644 \u0623\u0646\u0638\u0645\u0629 \u0627\u0644\u0648\u0642\u0648\u062f \u0627\u0644\u0628\u062f\u064a\u0644\u0629"
+      },
+      "D-16": {
+        "en": "Removes and installs mechanical components",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u062b\u0628\u0651\u062a \u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0645\u064a\u0643\u0627\u0646\u064a\u0643\u064a\u0629"
+      },
+      "D-17": {
+        "en": "Removes, repairs and installs electrical/electronic components",
+        "ar": "\u064a\u0641\u0643\u0651 \u0648\u064a\u064f\u0635\u0644\u062d \u0648\u064a\u062b\u0628\u0651\u062a \u0627\u0644\u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0643\u0647\u0631\u0628\u0627\u0626\u064a\u0629/\u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629"
+      },
+      "E-18": {
+        "en": "Repairs and replaces interior components",
+        "ar": "\u064a\u064f\u0635\u0644\u062d \u0648\u064a\u0633\u062a\u0628\u062f\u0644 \u0645\u0643\u0648\u0651\u0646\u0627\u062a \u0627\u0644\u0645\u0642\u0635\u0648\u0631\u0629"
+      },
+      "E-19": {
+        "en": "Services supplemental restraint systems (SRS)",
+        "ar": "\u064a\u064f\u062e\u062f\u0651\u0645 \u0623\u0646\u0638\u0645\u0629 \u0627\u0644\u062a\u062b\u0628\u064a\u062a \u0627\u0644\u0625\u0636\u0627\u0641\u064a\u0629 (\u0627\u0644\u0648\u0633\u0627\u0626\u062f \u0627\u0644\u0647\u0648\u0627\u0626\u064a\u0629 \u0648\u0623\u062d\u0632\u0645\u0629 \u0627\u0644\u0623\u0645\u0627\u0646)"
+      },
+      "F-20": {
+        "en": "Prepares surface",
+        "ar": "\u064a\u064f\u062d\u0636\u0651\u0631 \u0627\u0644\u0633\u0637\u062d"
+      },
+      "F-21": {
+        "en": "Uses repair materials",
+        "ar": "\u064a\u0633\u062a\u062e\u062f\u0645 \u0645\u0648\u0627\u062f \u0627\u0644\u0625\u0635\u0644\u0627\u062d"
+      },
+      "F-22": {
+        "en": "Prepares refinishing equipment",
+        "ar": "\u064a\u064f\u062d\u0636\u0651\u0631 \u0645\u0639\u062f\u0627\u062a \u0627\u0644\u0637\u0644\u0627\u0621"
+      },
+      "F-23": {
+        "en": "Prepares refinishing materials",
+        "ar": "\u064a\u064f\u062d\u0636\u0651\u0631 \u0645\u0648\u0627\u062f \u0627\u0644\u0637\u0644\u0627\u0621"
+      },
+      "F-24": {
+        "en": "Applies refinishing materials",
+        "ar": "\u064a\u0637\u0628\u0651\u0642 \u0645\u0648\u0627\u062f \u0627\u0644\u0637\u0644\u0627\u0621"
+      },
+      "F-25": {
+        "en": "Performs post-refinishing functions",
+        "ar": "\u064a\u0646\u0641\u0651\u0630 \u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0645\u0627 \u0628\u0639\u062f \u0627\u0644\u0637\u0644\u0627\u0621"
+      },
+      "G-26": {
+        "en": "Details exterior",
+        "ar": "\u064a\u062c\u0645\u0644 \u0627\u0644\u0645\u0638\u0647\u0631 \u0627\u0644\u062e\u0627\u0631\u062c\u064a"
+      },
+      "G-27": {
+        "en": "Cleans vehicle",
+        "ar": "\u064a\u0646\u0638\u0651\u0641 \u0627\u0644\u0645\u0631\u0643\u0628\u0629"
+      }
+    }
+  },
+  "bookFiles": [
+    "old_book-1.json",
+    "old_book-2.json",
+    "old_book-3.json",
+    "old_book-4.json",
+    "RED_SEAL_Sample_Questions.json",
+    "SAIT_Year1.json",
+    "Motorbooks_50MCQ.json"
+  ],
+  "glossaryFile": "glossary.json"
+}
