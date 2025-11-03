@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --red-seal-color: #c1121f;
+  --border-color: #d1d5db;
+}
+
+.btn-primary {
+  @apply px-4 py-2 rounded-lg bg-red-seal text-white font-semibold hover:bg-red-700;
+}
+
+.card {
+  @apply bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 p-4 rounded-xl;
+}

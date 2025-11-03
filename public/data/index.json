@@ -1,0 +1,13 @@
+{
+  "files": [
+    "old_book-1.json",
+    "old_book-2.json",
+    "old_book-3.json",
+	"old_book-4.json",
+	"RED_SEAL_Sample_Questions.json",
+	"SAIT_Year1.json",
+	"Motorbooks_50MCQ.json",
+	"glossary.json"	
+	  ],
+  "notes": "Add any new JSON file here and list it in 'files'. No rebuild needed."
+}
