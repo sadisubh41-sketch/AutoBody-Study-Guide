@@ -1,0 +1,87 @@
+{
+  "comment_usage": "Use this scaffold when prompting an AI assistant to convert bilingual (English/Arabic) HTML questions into the JSON structure expected by the Auto Body Technician study app.",
+  "questions": [
+    {
+      "comment": "Replace each placeholder with real content parsed from the HTML source.",
+      "uid": "B1AA1.01q1",
+      "comment_uid": "Follow the naming convention: 'B' + Book Number + MWA Letter + Task Code + 'q' + Question Number.",
+      "question": {
+        "en": "<p>Main English stem extracted from the HTML goes here.</p>",
+        "ar": "<p>نص السؤال باللغة العربية كما هو في المصدر.</p>"
+      },
+      "choices": [
+        {
+          "en": "Choice A text in English.",
+          "ar": "الخيار أ بالعربية."
+        },
+        {
+          "en": "Choice B text in English.",
+          "ar": "الخيار ب بالعربية."
+        },
+        {
+          "en": "Choice C text in English.",
+          "ar": "الخيار ج بالعربية."
+        },
+        {
+          "en": "Choice D text in English.",
+          "ar": "الخيار د بالعربية."
+        }
+      ],
+      "correctAnswerIndex": 0,
+      "classification": {
+        "mwa": "A",
+        "task": "A1.01",
+        "objective": "A1.01.01"
+      },
+      "type": "knowledge",
+      "explanation": {
+        "comment_explanation": "Include both a quick summary in 'plain' and a structured 'richText' array. Supported block types: paragraph, heading, list (style = 'ordered' or 'unordered'), note (variant = info|success|warning|danger), quote, divider, and inline HTML spans for colour.",
+        "en": {
+          "plain": "Summarise the English rationale in one or two sentences.",
+          "richText": [
+            {
+              "type": "paragraph",
+              "content": "State the core reason the answer is correct and reference the relevant specification."
+            },
+            {
+              "type": "list",
+              "style": "ordered",
+              "items": [
+                "Step-by-step reasoning or diagnostic cues derived from the HTML explanation.",
+                {
+                  "content": "Highlight numeric values with colour when emphasised in the source, e.g. <span style=\"color:#0f766e\">Torque to 45 Nm</span>."
+                }
+              ]
+            },
+            {
+              "type": "note",
+              "variant": "success",
+              "title": "Technician Tip",
+              "content": "Keep the panel temperature within the OEM range to prevent paint failure."
+            }
+          ]
+        },
+        "ar": {
+          "plain": "اكتب ملخصًا مختصرًا للسبب بالعربية.",
+          "direction": "rtl",
+          "richText": [
+            {
+              "type": "paragraph",
+              "content": "اشرح السبب الرئيسي للإجابة الصحيحة، ويمكن استخدام <strong>التنسيق</strong> أو <u>التسطير</u> بحسب الحاجة."
+            },
+            {
+              "type": "list",
+              "style": "unordered",
+              "items": [
+                "إعادة صياغة التفسير في نقاط موجزة.",
+                {
+                  "content": "تمييز القيم المهمة بلون مناسب مثل <span style=\"color:#f97316\">45 نيوتن متر</span>."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

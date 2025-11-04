@@ -286,7 +286,7 @@ async function main() {
         }
 
         if (!glossaryTermRegex || !text) return text;
-        
+
         const termMap = GLOSSARY_TERMS.reduce((acc, term) => {
             if (term.norm_en) acc[term.norm_en.toLowerCase()] = term;
             if (term.norm_ar) acc[term.norm_ar.toLowerCase()] = term;
@@ -300,6 +300,189 @@ async function main() {
             }
             return match;
         });
+    }
+
+    function formatInlineRichText(value, lang) {
+        if (value === undefined || value === null) return '';
+        const normalized = String(value).replace(/\r\n/g, '\n');
+        const withBreaks = normalized.replace(/\n/g, '<br>');
+        return highlightTermsInText(withBreaks, lang);
+    }
+
+    function renderRichListItem(item, lang) {
+        if (item === undefined || item === null) return '';
+        if (Array.isArray(item)) {
+            return item.map(child => renderRichListItem(child, lang)).join('');
+        }
+        if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+            return `<li>${formatInlineRichText(item, lang)}</li>`;
+        }
+        if (typeof item === 'object') {
+            const colorStyle = item.color ? ` style="color:${item.color}"` : '';
+            const text = formatInlineRichText(item.content ?? item.text ?? item.value ?? '', lang);
+            let childrenHtml = '';
+            if (Array.isArray(item.items) && item.items.length > 0) {
+                const nestedTag = item.style === 'ordered' ? 'ol' : 'ul';
+                childrenHtml = `<${nestedTag} class="rich-text-list">${item.items.map(child => renderRichListItem(child, lang)).join('')}</${nestedTag}>`;
+            }
+            return `<li${colorStyle}>${text}${childrenHtml}</li>`;
+        }
+        return '';
+    }
+
+    function renderRichTextBlock(block, lang) {
+        if (block === undefined || block === null) return '';
+        if (typeof block === 'string' || typeof block === 'number' || typeof block === 'boolean') {
+            return `<p>${formatInlineRichText(block, lang)}</p>`;
+        }
+        if (Array.isArray(block)) {
+            return block.map(item => renderRichTextBlock(item, lang)).join('');
+        }
+        if (block.html) {
+            return highlightTermsInText(block.html, lang);
+        }
+
+        const colorStyle = block.color ? ` style="color:${block.color}"` : '';
+        switch (block.type) {
+            case 'heading': {
+                const level = Math.min(Math.max(parseInt(block.level, 10) || 4, 2), 6);
+                const text = formatInlineRichText(block.content ?? block.text ?? block.value ?? '', lang);
+                return `<h${level} class="rich-text-heading"${colorStyle}>${text}</h${level}>`;
+            }
+            case 'list': {
+                const listTag = block.style === 'ordered' ? 'ol' : 'ul';
+                const items = Array.isArray(block.items) ? block.items.map(item => renderRichListItem(item, lang)).join('') : '';
+                return `<${listTag} class="rich-text-list"${colorStyle}>${items}</${listTag}>`;
+            }
+            case 'note':
+            case 'callout': {
+                const variant = block.variant || 'info';
+                const title = block.title ? `<strong>${formatInlineRichText(block.title, lang)}</strong>` : '';
+                const body = block.content ? `<div>${formatInlineRichText(block.content, lang)}</div>` : '';
+                const extra = block.html ? highlightTermsInText(block.html, lang) : '';
+                return `<div class="rich-text-note rich-text-note-${variant}">${title}${body}${extra}</div>`;
+            }
+            case 'quote': {
+                const text = formatInlineRichText(block.content ?? block.text ?? block.value ?? '', lang);
+                return `<blockquote class="rich-text-quote"${colorStyle}>${text}</blockquote>`;
+            }
+            case 'divider': {
+                return `<hr class="rich-text-divider">`;
+            }
+            default: {
+                if (block.items) {
+                    return renderRichTextBlock({ type: 'list', style: block.style, items: block.items, color: block.color }, lang);
+                }
+                const text = formatInlineRichText(block.content ?? block.text ?? block.value ?? '', lang);
+                return `<p${colorStyle}>${text}</p>`;
+            }
+        }
+    }
+
+    function buildRichTextHtml(value, lang) {
+        if (value === undefined || value === null) return '';
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            const text = String(value).replace(/\r\n/g, '\n');
+            const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+            if (paragraphs.length <= 1) {
+                return `<p>${formatInlineRichText(text.trim(), lang)}</p>`;
+            }
+            return paragraphs.map(paragraph => `<p>${formatInlineRichText(paragraph, lang)}</p>`).join('');
+        }
+        if (Array.isArray(value)) {
+            return value.map(item => renderRichTextBlock(item, lang)).join('');
+        }
+        if (typeof value === 'object') {
+            return renderRichTextBlock(value, lang);
+        }
+        return '';
+    }
+
+    function interpretRichText(definition, lang) {
+        if (definition === undefined || definition === null) {
+            return { html: '', direction: null };
+        }
+
+        if (typeof definition === 'string' || typeof definition === 'number' || typeof definition === 'boolean' || Array.isArray(definition)) {
+            return { html: buildRichTextHtml(definition, lang), direction: null };
+        }
+
+        if (typeof definition === 'object') {
+            const direction = definition.direction || null;
+
+            if (definition.html) {
+                const html = highlightTermsInText(definition.html, lang);
+                if (html) return { html, direction };
+            }
+
+            if (definition.richText !== undefined) {
+                const html = buildRichTextHtml(definition.richText, lang);
+                if (html) return { html, direction };
+            }
+
+            if (definition.blocks !== undefined) {
+                const html = buildRichTextHtml(definition.blocks, lang);
+                if (html) return { html, direction };
+            }
+
+            if (definition.plain !== undefined) {
+                const html = buildRichTextHtml(definition.plain, lang);
+                if (html) return { html, direction };
+            }
+
+            if (definition.content !== undefined && typeof definition.content !== 'object') {
+                const html = buildRichTextHtml(definition.content, lang);
+                if (html) return { html, direction };
+            }
+
+            const fallbackHtml = buildRichTextHtml(definition, lang);
+            return { html: fallbackHtml, direction };
+        }
+
+        return { html: '', direction: null };
+    }
+
+    function resolveLocalizedRichText(content, lang) {
+        if (!content) return { html: '', direction: null };
+
+        if (typeof content === 'string' || Array.isArray(content) || typeof content === 'number' || typeof content === 'boolean') {
+            return interpretRichText(content, lang);
+        }
+
+        if (typeof content !== 'object') {
+            return { html: '', direction: null };
+        }
+
+        const languageKeys = ['en', 'ar', 'fr', 'es'];
+        const hasLanguageKeys = languageKeys.some(key => Object.prototype.hasOwnProperty.call(content, key));
+
+        if (hasLanguageKeys) {
+            const localizedValue = content[lang];
+            if (localizedValue !== undefined) {
+                const parsed = interpretRichText(localizedValue, lang);
+                if (parsed.html) return parsed;
+            }
+
+            for (const fallbackKey of languageKeys) {
+                if (fallbackKey !== lang && content[fallbackKey] !== undefined) {
+                    return interpretRichText(content[fallbackKey], fallbackKey);
+                }
+            }
+            return { html: '', direction: null };
+        }
+
+        return interpretRichText(content, lang);
+    }
+
+    function applyRichTextToElement(element, content, lang) {
+        if (!element) return;
+        const { html, direction } = resolveLocalizedRichText(content, lang);
+        element.innerHTML = html || '';
+        if (direction) {
+            element.setAttribute('dir', direction);
+        } else {
+            element.removeAttribute('dir');
+        }
     }
 
     function startQuiz(questions, mode, bookId, contextId) {
@@ -445,9 +628,11 @@ async function main() {
                 item.style.pointerEvents = 'none';
             });
     
-            explanationEN.innerHTML = highlightTermsInText(q.explanation.en, 'en');
-            explanationAR.innerHTML = highlightTermsInText(q.explanation.ar, 'ar');
-            explanationBox.classList.remove('hidden');
+            applyRichTextToElement(explanationEN, q.explanation, 'en');
+            applyRichTextToElement(explanationAR, q.explanation, 'ar');
+            if ((explanationEN.innerHTML && explanationEN.innerHTML.trim()) || (explanationAR.innerHTML && explanationAR.innerHTML.trim())) {
+                explanationBox.classList.remove('hidden');
+            }
     
             nextQuestionBtn.classList.remove('hidden');
             submitAnswerBtn.classList.add('hidden');
@@ -552,6 +737,11 @@ async function main() {
                 const userChoice = String.fromCharCode(65 + item.final);
                 const correctChoice = String.fromCharCode(65 + item.correctAnswer);
 
+                const explanationEn = resolveLocalizedRichText(questionData.explanation, 'en');
+                const explanationAr = resolveLocalizedRichText(questionData.explanation, 'ar');
+                const englishExplanation = explanationEn.html ? `<div class="mb-3"><p class="font-bold mb-1">Explanation:</p><div class="rich-text"${explanationEn.direction ? ` dir="${explanationEn.direction}"` : ''}>${explanationEn.html}</div></div>` : '';
+                const arabicExplanation = explanationAr.html ? `<div class="rtl"><p class="font-bold mt-2 mb-1">:الشرح</p><div class="rich-text"${explanationAr.direction ? ` dir="${explanationAr.direction}"` : ''}>${explanationAr.html}</div></div>` : '';
+
                 return `
                 <details class="border-b border-[var(--border-color)]">
                     <summary class="p-2 cursor-pointer flex justify-between items-center text-sm">
@@ -561,10 +751,8 @@ async function main() {
                     <div class="p-4 bg-slate-50 dark:bg-slate-800 border-t border-[var(--border-color)] text-sm">
                         <p>You answered: <strong>${userChoice}</strong>. The correct answer was: <strong>${correctChoice}</strong>.</p>
                         <hr class="my-2 border-[var(--border-color)]">
-                        <p class="font-bold mb-1">Explanation:</p>
-                        <p>${highlightTermsInText(questionData.explanation.en, 'en')}</p>
-                        <p class="rtl font-bold mt-2 mb-1">:الشرح</p>
-                        <p class="rtl">${highlightTermsInText(questionData.explanation.ar, 'ar')}</p>
+                        ${englishExplanation}
+                        ${arabicExplanation}
                     </div>
                 </details>
                 `;
@@ -790,6 +978,38 @@ async function main() {
         document.querySelectorAll('.delete-assessment-btn').forEach(btn => btn.addEventListener('click', (e) => deleteAssessment(e.currentTarget.dataset.id)));
     }
 
+    function collectQuestionPerformance(uid) {
+        const stats = { correct: 0, incorrect: 0, total: 0, modes: new Set() };
+        const progressEntry = state.progress[uid];
+        if (progressEntry && progressEntry.modes) {
+            Object.entries(progressEntry.modes).forEach(([mode, modeStats]) => {
+                if (mode !== 'assessment' && modeStats) {
+                    stats.modes.add(mode);
+                    stats.correct += modeStats.correct || 0;
+                    stats.incorrect += modeStats.incorrect || 0;
+                }
+            });
+        }
+
+        if (stats.correct === 0 && stats.incorrect === 0) {
+            state.sessionHistory.forEach(session => {
+                if (session && session.mode && session.mode !== 'assessment' && Array.isArray(session.sessionLog)) {
+                    const attempts = session.sessionLog.filter(entry => entry.qId === uid);
+                    if (attempts.length > 0) {
+                        stats.modes.add(session.mode);
+                        attempts.forEach(entry => {
+                            if (entry.isCorrect) stats.correct++;
+                            else stats.incorrect++;
+                        });
+                    }
+                }
+            });
+        }
+
+        stats.total = stats.correct + stats.incorrect;
+        return stats;
+    }
+
     function renderReviewPage() {
         const lang = state.settings.language;
         const searchTerm = reviewSearch.value.toLowerCase();
@@ -798,48 +1018,77 @@ async function main() {
         const bookFilter = reviewFilterBook.value;
         const mwaFilter = reviewFilterMwa.value;
 
-        const attemptedUIDs = Object.keys(state.progress).filter(uid => {
-            const modes = Object.keys(state.progress[uid].modes || {});
-            return modes.some(m => m !== 'assessment');
+        const attemptedUIDSet = new Set();
+        Object.entries(state.progress).forEach(([uid, prog]) => {
+            const modes = prog?.modes || {};
+            const hasAttempts = Object.entries(modes).some(([mode, stats]) => mode !== 'assessment' && (stats?.attempts || stats?.correct || stats?.incorrect));
+            if (hasAttempts || (prog.correct || 0) + (prog.incorrect || 0) > 0) {
+                attemptedUIDSet.add(uid);
+            }
+        });
+        state.sessionHistory.forEach(session => {
+            if (Array.isArray(session?.sessionLog)) {
+                session.sessionLog.forEach(entry => {
+                    if (entry?.qId) attemptedUIDSet.add(entry.qId);
+                });
+            }
         });
 
         const allQuestions = ALL_BOOKS_DATA.flatMap(b => b.sections.flatMap(s => s.questions));
+        const statsCache = new Map();
+        const getStats = (uid) => {
+            if (!statsCache.has(uid)) {
+                statsCache.set(uid, collectQuestionPerformance(uid));
+            }
+            return statsCache.get(uid);
+        };
 
-        let questionsToReview = allQuestions
-            .filter(q => attemptedUIDs.includes(q.uid))
-            .filter(q => !flaggedOnly || state.flaggedQuestions.includes(q.uid))
-            .filter(q => !searchTerm || q.question.en.toLowerCase().includes(searchTerm) || q.question.ar.includes(searchTerm) || q.uid.toLowerCase().includes(searchTerm))
-            .filter(q => {
-                if (statusFilter === 'all') return true;
-                const prog = state.progress[q.uid];
-                const correct = (prog.modes.study?.correct || 0) + (prog.modes.quiz?.correct || 0);
-                const incorrect = (prog.modes.study?.incorrect || 0) + (prog.modes.quiz?.incorrect || 0);
-                return statusFilter === 'correct' ? correct > incorrect : incorrect >= correct;
+        if (attemptedUIDSet.size === 0) {
+            reviewList.innerHTML = `<p class="text-slate-500 text-center p-4">Answer questions in Study or Quiz mode to unlock the review list.</p>`;
+            return;
+        }
+
+        const filteredQuestions = allQuestions
+            .filter(q => attemptedUIDSet.has(q.uid))
+            .map(question => ({ question, stats: getStats(question.uid) }))
+            .filter(({ stats }) => stats.total > 0)
+            .filter(({ question }) => !flaggedOnly || state.flaggedQuestions.includes(question.uid))
+            .filter(({ question }) => {
+                if (!searchTerm) return true;
+                return question.question.en.toLowerCase().includes(searchTerm)
+                    || question.question.ar.includes(searchTerm)
+                    || question.uid.toLowerCase().includes(searchTerm);
             })
-            .filter(q => bookFilter === 'all' || q.uid.startsWith(`B${bookFilter.replace('book','')}`))
-            .filter(q => mwaFilter === 'all' || q.classification.mwa === mwaFilter);
+            .filter(({ stats }) => {
+                if (statusFilter === 'all') return true;
+                const mostlyCorrect = stats.correct >= stats.incorrect;
+                return statusFilter === 'correct' ? mostlyCorrect : !mostlyCorrect;
+            })
+            .filter(({ question }) => bookFilter === 'all' || question.uid.startsWith(`B${bookFilter.replace('book', '')}`))
+            .filter(({ question }) => mwaFilter === 'all' || question.classification.mwa === mwaFilter);
 
-        reviewList.innerHTML = questionsToReview.length > 0 ? questionsToReview.map(q => {
-            const prog = state.progress[q.uid];
-            const correct = (prog.modes.study?.correct || 0) + (prog.modes.quiz?.correct || 0);
-            const incorrect = (prog.modes.study?.incorrect || 0) + (prog.modes.quiz?.incorrect || 0);
-            const isCorrect = correct > incorrect;
-            const statusIcon = isCorrect ? '✅' : '❌';
+        reviewList.innerHTML = filteredQuestions.length > 0 ? filteredQuestions.map(({ question: q, stats }) => {
             const isFlagged = state.flaggedQuestions.includes(q.uid);
+            const statusIcon = stats.correct === stats.incorrect ? '⏳' : (stats.correct > stats.incorrect ? '✅' : '❌');
             const book = ALL_BOOKS_DATA.find(b => q.uid.startsWith(`B${b.id.replace('book','')}`));
-            const section = book.sections.find(s => s.questions.some(qu => qu.uid === q.uid));
-            const bookText = book.title[lang];
-            const sectionText = section.title[lang];
-            const mwaText = CODEBOOK.mwa[q.classification.mwa]?.[lang] || '';
-            const taskText = CODEBOOK.tasks[q.classification.task]?.[lang] || '';
-            const modesAttempted = Object.keys(prog.modes || {}).filter(m => m !== 'assessment').map(m => `<span class="mode-tag mode-${m}">${m}</span>`).join(' ');
+            const section = book?.sections.find(s => s.questions.some(qu => qu.uid === q.uid));
+            const bookText = book?.title?.[lang] || book?.title?.en || '';
+            const sectionText = section?.title?.[lang] || section?.title?.en || '';
+            const mwaText = CODEBOOK.mwa[q.classification.mwa]?.[lang] || CODEBOOK.mwa[q.classification.mwa]?.en || '';
+            const taskText = CODEBOOK.tasks[q.classification.task]?.[lang] || CODEBOOK.tasks[q.classification.task]?.en || '';
+            const modesAttempted = Array.from(stats.modes).filter(mode => mode !== 'assessment').map(mode => `<span class="mode-tag mode-${mode}">${mode}</span>`).join(' ');
+
+            const explanationEn = resolveLocalizedRichText(q.explanation, 'en');
+            const explanationAr = resolveLocalizedRichText(q.explanation, 'ar');
+            const englishExplanation = explanationEn.html ? `<div class="mb-4"><p class="font-bold mb-2">Explanation:</p><div class="rich-text"${explanationEn.direction ? ` dir="${explanationEn.direction}"` : ''}>${explanationEn.html}</div></div>` : '';
+            const arabicExplanation = explanationAr.html ? `<div class="rtl"><p class="font-bold mt-4 mb-2">:الشرح</p><div class="rich-text"${explanationAr.direction ? ` dir="${explanationAr.direction}"` : ''}>${explanationAr.html}</div></div>` : '';
 
             return `
                 <details class="border-b border-[var(--border-color)]">
                     <summary class="p-4 cursor-pointer grid grid-cols-12 gap-4 items-center">
                         <div class="col-span-1 text-center">${isFlagged ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="text-indigo-600 inline-block"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>' : ''}</div>
                         <div class="col-span-8">
-                            <p class="font-semibold text-sm truncate">${highlightTermsInText(q.question[lang], lang)}</p>
+                            <p class="font-semibold text-sm truncate">${highlightTermsInText(q.question[lang] || q.question.en, lang)}</p>
                             <div class="text-xs text-slate-500 mt-1 space-y-0.5">
                                 <div><strong>Book:</strong> ${bookText} &bull; <strong>Subject:</strong> ${sectionText}</div>
                                 <div><strong>Category:</strong> ${q.classification.mwa} - ${mwaText}</div>
@@ -851,15 +1100,15 @@ async function main() {
                     </summary>
                     <div class="p-4 bg-slate-50 dark:bg-slate-800 border-t border-[var(--border-color)]">
                          <p class="text-xs text-slate-500 mb-4"><strong>UID:</strong> ${q.uid}</p>
-                        <p class="font-bold mb-2">Correct Answer:</p>
-                        <p class="mb-4">${String.fromCharCode(65 + q.correctAnswerIndex)}. ${highlightTermsInText(q.choices[q.correctAnswerIndex].en, 'en')}</p>
-                        <p class="rtl font-bold mb-2">:الإجابة الصحيحة</p>
-                        <p class="rtl mb-4">${highlightTermsInText(q.choices[q.correctAnswerIndex].ar, 'ar')}</p>
+                        <div class="mb-4">
+                            <p class="font-bold mb-2">Correct Answer:</p>
+                            <p class="mb-2">${String.fromCharCode(65 + q.correctAnswerIndex)}. ${highlightTermsInText(q.choices[q.correctAnswerIndex].en, 'en')}</p>
+                            <p class="rtl font-bold mb-2">:الإجابة الصحيحة</p>
+                            <p class="rtl">${highlightTermsInText(q.choices[q.correctAnswerIndex].ar, 'ar')}</p>
+                        </div>
                         <hr class="my-4 border-[var(--border-color)]">
-                        <p class="font-bold mb-2">Explanation:</p>
-                        <p>${highlightTermsInText(q.explanation.en, 'en')}</p>
-                        <p class="rtl font-bold mt-4 mb-2">:الشرح</p>
-                        <p class="rtl">${highlightTermsInText(q.explanation.ar, 'ar')}</p>
+                        ${englishExplanation}
+                        ${arabicExplanation}
                     </div>
                 </details>`;
         }).join('') : `<p class="text-slate-500 text-center p-4">No questions match your current filters.</p>`;

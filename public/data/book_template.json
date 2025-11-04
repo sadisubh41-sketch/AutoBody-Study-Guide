@@ -47,8 +47,57 @@
           "correctAnswerIndex": 0,
           "comment_correctAnswerIndex": "The index of the correct answer in the 'choices' array. It is zero-based (0 for A, 1 for B, 2 for C, 3 for D).",
           "explanation": {
-            "en": "Detailed explanation for why the correct answer is correct, in English.",
-            "ar": "شرح مفصل لسبب صحة الإجابة الصحيحة، باللغة العربية."
+            "comment_explanation": "Explanations support rich formatting. Provide at least a plain summary and, when possible, a structured richText array to enable headings, lists, emphasis, and coloured text.",
+            "en": {
+              "plain": "Detailed explanation for why the correct answer is correct, in English.",
+              "richText": [
+                {
+                  "type": "heading",
+                  "level": 5,
+                  "content": "Why this answer is correct"
+                },
+                {
+                  "type": "paragraph",
+                  "content": "Begin with a short overview that states the key reason this option is correct. Use <strong>bold</strong>, <em>italic</em>, or <u>underline</u> for emphasis when needed."
+                },
+                {
+                  "type": "list",
+                  "style": "unordered",
+                  "items": [
+                    "Break the explanation into digestible points to help apprentices review each idea quickly.",
+                    {
+                      "content": "Call out exact specifications with colour when required, e.g. <span style=\"color:#0f766e\">torque to 45 Nm</span>."
+                    }
+                  ]
+                },
+                {
+                  "type": "note",
+                  "variant": "warning",
+                  "title": "Safety Reminder",
+                  "content": "Always disconnect the battery before working on electrical components."
+                }
+              ]
+            },
+            "ar": {
+              "plain": "شرح موجز يوضح سبب صحة الإجابة باللغة العربية.",
+              "direction": "rtl",
+              "richText": [
+                {
+                  "type": "paragraph",
+                  "content": "ابدأ بملخص قصير يوضح السبب الرئيسي للاختيار الصحيح مع إمكانية استخدام <strong>تنسيق</strong> للتأكيد."
+                },
+                {
+                  "type": "list",
+                  "style": "unordered",
+                  "items": [
+                    "قسِّم الشرح إلى نقاط مختصرة وواضحة.",
+                    {
+                      "content": "يمكن تمييز الأرقام أو القيم المهمة بالألوان، مثل <span style=\"color:#f97316\">45 نيوتن متر</span>."
+                    }
+                  ]
+                }
+              ]
+            }
           },
           "classification": {
             "mwa": "A",
