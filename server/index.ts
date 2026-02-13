@@ -6,6 +6,7 @@ import connectPgSimple from 'connect-pg-simple';
 import pool from './db/pool';
 import authRoutes from './routes/auth';
 import progressRoutes from './routes/progress';
+import autoLocalUser from './middleware/autoLocalUser';
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ app.use(session({
     sameSite: 'lax',
   },
 }));
+
+// Auto-assign a default local user so all browsers share the same progress
+app.use('/api', autoLocalUser);
 
 app.use('/api', authRoutes);
 app.use('/api', progressRoutes);
