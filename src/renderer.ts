@@ -1,4 +1,92 @@
-// @ts-nocheck
+import { me, loadProgress, saveProgress } from './lib/api';
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
+
+declare global {
+    interface Window {
+        mwaChart?: Chart;
+        changeChart?: Chart;
+        assessmentMwaChart?: Chart;
+        assessmentChangeChart?: Chart;
+        dashboardMwaChart?: Chart;
+    }
+}
+
+// ── Utility helpers ──────────────────────────────────────────────────
+function fisherYatesShuffle<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+function escapeAttr(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── UID-to-book index (built once at startup) ────────────────────────
+let uidToBookIndex: Map<string, any> = new Map();
+
+function buildUidToBookIndex(books: any[]) {
+    uidToBookIndex = new Map();
+    books.forEach(book => {
+        book.sections.forEach((section: any) => {
+            section.questions.forEach((q: any) => {
+                uidToBookIndex.set(q.uid, book);
+            });
+        });
+    });
+}
+
+function getBookForQuestion(uid: string): any | undefined {
+    return uidToBookIndex.get(uid);
+}
+
+function normalizeClassifications(books: any[], codebook: any) {
+    const validMwa = new Set(Object.keys(codebook?.mwa || {}));
+    const validTasks = new Set(Object.keys(codebook?.tasks || {}));
+
+    // Build reverse lookup from descriptive names → codes
+    const mwaReverse: Record<string, string> = {};
+    const taskReverse: Record<string, string> = {};
+    if (codebook?.mwa) {
+        Object.entries(codebook.mwa).forEach(([code, names]: [string, any]) => {
+            if (names.en) mwaReverse[names.en.toLowerCase()] = code;
+            if (names.ar) mwaReverse[names.ar.toLowerCase()] = code;
+        });
+    }
+    if (codebook?.tasks) {
+        Object.entries(codebook.tasks).forEach(([code, names]: [string, any]) => {
+            if (names.en) taskReverse[names.en.toLowerCase()] = code;
+            if (names.ar) taskReverse[names.ar.toLowerCase()] = code;
+        });
+    }
+
+    books.forEach(book => {
+        book.sections?.forEach((section: any) => {
+            section.questions?.forEach((q: any) => {
+                if (!q.classification) {
+                    q.classification = { mwa: '', task: '' };
+                }
+                const mwa = (q.classification.mwa || '').trim();
+                if (mwa && !validMwa.has(mwa)) {
+                    q.classification.mwa = mwaReverse[mwa.toLowerCase()] || mwa;
+                }
+                const task = (q.classification.task || '').trim();
+                if (task && !validTasks.has(task)) {
+                    q.classification.task = taskReverse[task.toLowerCase()] || task;
+                }
+            });
+        });
+    });
+}
+
 async function fetchData() {
     try {
         const manifestResponse = await fetch('data.json');
@@ -7,24 +95,38 @@ async function fetchData() {
         const { codebook, bookFiles, glossaryFile } = manifest;
         if (!bookFiles || bookFiles.length === 0) throw new Error("No book files listed in data.json manifest.");
 
-        const bookPromises = bookFiles.map(async (filename) => {
+        const bookPromises = bookFiles.map(async (filename: string) => {
             const bookResponse = await fetch(`data/${filename}`);
             if (!bookResponse.ok) throw new Error(`Could not fetch data/${filename}. Status: ${bookResponse.status}`);
             return bookResponse.json();
         });
 
-        let glossaryData = [];
+        let glossaryData: any[] = [];
         if (glossaryFile) {
             const glossaryResponse = await fetch(`data/${glossaryFile}`);
             if (!glossaryResponse.ok) throw new Error(`Could not fetch data/${glossaryFile}. Status: ${glossaryResponse.status}`);
             glossaryData = await glossaryResponse.json();
         }
 
-        const loadedBooks = await Promise.all(bookPromises);
+        const bookResults = await Promise.allSettled(bookPromises);
+        const loadedBooks: any[] = [];
+        bookResults.forEach((result, i) => {
+            if (result.status === 'fulfilled') {
+                loadedBooks.push(result.value);
+            } else {
+                console.warn(`Failed to load book file "${bookFiles[i]}":`, result.reason);
+            }
+        });
+        if (loadedBooks.length === 0) throw new Error("All book files failed to load.");
         return { codebook, books: loadedBooks, manifest, glossary: glossaryData };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Could not load app data:", error);
-        document.body.innerHTML = `<div class="p-8 text-center bg-red-100 text-red-800 rounded-lg"><strong>Error:</strong> ${error.message}. Please ensure 'data.json' is in the root directory, and all other .json files are inside a 'data/' folder.</div>`;
+        const msg = error?.message ? escapeHtml(error.message) : 'Unknown error';
+        document.body.textContent = '';
+        const div = document.createElement('div');
+        div.className = 'p-8 text-center bg-red-100 text-red-800 rounded-lg';
+        div.innerHTML = `<strong>Error:</strong> ${msg}. Please ensure 'data.json' is in the root directory, and all other .json files are inside a 'data/' folder.`;
+        document.body.appendChild(div);
         return null;
     }
 }
@@ -34,158 +136,235 @@ async function main() {
     const APP_DATA = await fetchData();
     if (!APP_DATA) return;
 
-    const state = { 
-        currentPage: 'dashboard', 
-        settings: { username: '', language: 'en', theme: 'light' }, 
-        quiz: { 
-            isActive: false, 
-            mode: 'study', 
-            questions: [], 
-            currentQuestionIndex: 0, 
-            timer: 0, 
-            timerInterval: null, 
-            questionStartTime: 0, 
-            sessionLog: [], 
-            currentQuestionAnswered: false, 
+    const state: {
+        currentPage: string;
+        settings: { username: string; language: string; theme: string };
+        quiz: {
+            isActive: boolean;
+            mode: string;
+            questions: any[];
+            currentQuestionIndex: number;
+            timer: number;
+            timerInterval: ReturnType<typeof setInterval> | null;
+            questionStartTime: number;
+            sessionLog: any[];
+            currentQuestionAnswered: boolean;
+            currentAnswerLog: { initial: number | null; final: number | null };
+            sessionInfo: { bookId: string | null; contextId: string | null; startTime?: string };
+        };
+        progress: Record<string, any>;
+        assessmentLogs: any[];
+        flaggedQuestions: string[];
+        completedSections: string[];
+        sessionHistory: any[];
+    } = {
+        currentPage: 'dashboard',
+        settings: { username: '', language: 'en', theme: 'light' },
+        quiz: {
+            isActive: false,
+            mode: 'study',
+            questions: [],
+            currentQuestionIndex: 0,
+            timer: 0,
+            timerInterval: null,
+            questionStartTime: 0,
+            sessionLog: [],
+            currentQuestionAnswered: false,
             currentAnswerLog: { initial: null, final: null },
             sessionInfo: { bookId: null, contextId: null }
-        }, 
-        progress: {}, 
-        assessmentLogs: [], 
+        },
+        progress: {},
+        assessmentLogs: [],
         flaggedQuestions: [],
         completedSections: [],
         sessionHistory: []
     };
     const { books: ALL_BOOKS_DATA, codebook: CODEBOOK, manifest: CURRENT_MANIFEST, glossary: GLOSSARY_TERMS } = APP_DATA;
+    buildUidToBookIndex(ALL_BOOKS_DATA);
+    normalizeClassifications(ALL_BOOKS_DATA, CODEBOOK);
 
-    let wizardState = {
+    let wizardState: { currentStep: number; newBookData: any; newBookFileName: string | null } = {
         currentStep: 1,
         newBookData: null,
         newBookFileName: null,
     };
     
-    let glossaryTermRegex = null;
-    let currentPopupTermData = null;
+    let glossaryTermRegex: RegExp | null = null;
+    let currentPopupTermData: any = null;
 
     const pages = document.querySelectorAll('.page');
     const navButtons = document.querySelectorAll('.nav-btn');
-    const welcomeMessage = document.getElementById('welcome-message');
-    const usernameInput = document.getElementById('username');
-    const languageSelect = document.getElementById('language-select');
-    const themeToggle = document.getElementById('theme-toggle');
-    const resetProgressBtn = document.getElementById('reset-progress-btn');
-    const bookSelectStudy = document.getElementById('book-select-study');
-    const sectionSelect = document.getElementById('section-select');
-    const startStudyBtn = document.getElementById('start-study-btn');
-    const bookSelectQuiz = document.getElementById('book-select-quiz');
-    const quizSelect = document.getElementById('quiz-select');
-    const startQuizBtn = document.getElementById('start-quiz-btn');
-    const generateNewAssessmentBtn = document.getElementById('generate-new-assessment-btn');
-    const quizBreadcrumbs = document.getElementById('quiz-breadcrumbs');
-    const quizTimer = document.getElementById('quiz-timer');
-    const questionEN = document.getElementById('question-en');
-    const questionAR = document.getElementById('question-ar');
-    const choicesEN = document.getElementById('choices-en');
-    const choicesAR = document.getElementById('choices-ar');
-    const explanationBox = document.getElementById('explanation-box');
-    const explanationEN = document.getElementById('explanation-en');
-    const explanationAR = document.getElementById('explanation-ar');
-    const nextQuestionBtn = document.getElementById('next-question-btn');
-    const submitAnswerBtn = document.getElementById('submit-answer-btn');
-    const endSessionBtn = document.getElementById('end-session-btn');
-    const questionInfoFooter = document.getElementById('question-info-footer');
-    const englishCol = document.getElementById('english-col');
-    const arabicCol = document.getElementById('arabic-col');
-    const toggleTranslationBtn = document.getElementById('toggle-translation-btn');
-    const reportBookFilter = document.getElementById('report-book-filter');
-    const reportModeFilter = document.getElementById('report-mode-filter');
-    const reviewSearch = document.getElementById('review-search');
-    const reviewFlaggedOnly = document.getElementById('review-flagged-only');
-    const reviewList = document.getElementById('review-list');
-    const flagQuestionBtn = document.getElementById('flag-question-btn');
-    const flagIcon = document.getElementById('flag-icon');
-    const reviewFilterStatus = document.getElementById('review-filter-status');
-    const reviewFilterBook = document.getElementById('review-filter-book');
-    const reviewFilterMwa = document.getElementById('review-filter-mwa');
-    const resetFiltersBtn = document.getElementById('reset-filters-btn');
-    const sessionSummaryModal = document.getElementById('session-summary-modal');
-    const summaryTitle = document.getElementById('summary-title');
-    const summaryScore = document.getElementById('summary-score');
-    const summaryCorrect = document.getElementById('summary-correct');
-    const summaryIncorrect = document.getElementById('summary-incorrect');
-    const summaryBreakdown = document.getElementById('summary-breakdown');
-    const summaryQuestionList = document.getElementById('summary-question-list');
-    const summaryCloseBtn = document.getElementById('summary-close-btn');
-    const summaryReportsBtn = document.getElementById('summary-reports-btn');
+    const welcomeMessage = document.getElementById('welcome-message')!;
+    const usernameInput = document.getElementById('username') as HTMLInputElement;
+    const languageSelect = document.getElementById('language-select') as HTMLSelectElement;
+    const themeToggle = document.getElementById('theme-toggle') as HTMLInputElement;
+    const resetProgressBtn = document.getElementById('reset-progress-btn')!;
+    const bookSelectStudy = document.getElementById('book-select-study') as HTMLSelectElement;
+    const sectionSelect = document.getElementById('section-select') as HTMLSelectElement;
+    const startStudyBtn = document.getElementById('start-study-btn')!;
+    const bookSelectQuiz = document.getElementById('book-select-quiz') as HTMLSelectElement;
+    const quizSelect = document.getElementById('quiz-select') as HTMLSelectElement;
+    const startQuizBtn = document.getElementById('start-quiz-btn')!;
+    const generateNewAssessmentBtn = document.getElementById('generate-new-assessment-btn')!;
+    const quizBreadcrumbs = document.getElementById('quiz-breadcrumbs')!;
+    const quizTimer = document.getElementById('quiz-timer')!;
+    const questionEN = document.getElementById('question-en')!;
+    const questionAR = document.getElementById('question-ar')!;
+    const choicesEN = document.getElementById('choices-en')!;
+    const choicesAR = document.getElementById('choices-ar')!;
+    const explanationBox = document.getElementById('explanation-box')!;
+    const explanationEN = document.getElementById('explanation-en')!;
+    const explanationAR = document.getElementById('explanation-ar')!;
+    const nextQuestionBtn = document.getElementById('next-question-btn')!;
+    const submitAnswerBtn = document.getElementById('submit-answer-btn')!;
+    const endSessionBtn = document.getElementById('end-session-btn')!;
+    const questionInfoFooter = document.getElementById('question-info-footer')!;
+    const englishCol = document.getElementById('english-col')!;
+    const arabicCol = document.getElementById('arabic-col')!;
+    const toggleTranslationBtn = document.getElementById('toggle-translation-btn')!;
+    const reportBookFilter = document.getElementById('report-book-filter') as HTMLSelectElement;
+    const reportModeFilter = document.getElementById('report-mode-filter') as HTMLSelectElement;
+    const reviewSearch = document.getElementById('review-search') as HTMLInputElement;
+    const reviewFlaggedOnly = document.getElementById('review-flagged-only') as HTMLInputElement;
+    const reviewList = document.getElementById('review-list')!;
+    const flagQuestionBtn = document.getElementById('flag-question-btn')!;
+    const flagIcon = document.getElementById('flag-icon')!;
+    const reviewFilterStatus = document.getElementById('review-filter-status') as HTMLSelectElement;
+    const reviewFilterBook = document.getElementById('review-filter-book') as HTMLSelectElement;
+    const reviewFilterSubject = document.getElementById('review-filter-subject') as HTMLSelectElement;
+    const reviewFilterMwa = document.getElementById('review-filter-mwa') as HTMLSelectElement;
+    const resetFiltersBtn = document.getElementById('reset-filters-btn')!;
+    const sessionSummaryModal = document.getElementById('session-summary-modal')!;
+    const summaryTitle = document.getElementById('summary-title')!;
+    const summaryScore = document.getElementById('summary-score')!;
+    const summaryCorrect = document.getElementById('summary-correct')!;
+    const summaryIncorrect = document.getElementById('summary-incorrect')!;
+    const summaryBreakdown = document.getElementById('summary-breakdown')!;
+    const summaryQuestionList = document.getElementById('summary-question-list')!;
+    const summaryCloseBtn = document.getElementById('summary-close-btn')!;
+    const summaryReportsBtn = document.getElementById('summary-reports-btn')!;
     const reportTabs = document.querySelectorAll('.report-tab');
     const reportTabContents = document.querySelectorAll('.report-tab-content');
-    const reportsPlaceholder = document.getElementById('reports-placeholder');
-    const reportsContent = document.getElementById('reports-content');
-    const overallProgressStats = document.getElementById('overall-progress-stats');
-    const overallScoreStats = document.getElementById('overall-score-stats');
-    const modePerformanceBreakdown = document.getElementById('mode-performance-breakdown');
-    const performanceBlocks = document.getElementById('performance-blocks');
-    const assessmentSelectFilter = document.getElementById('assessment-select-filter');
-    const assessmentReportsPlaceholder = document.getElementById('assessment-reports-placeholder');
-    const assessmentReportsContent = document.getElementById('assessment-reports-content');
-    const assessmentOverallStats = document.getElementById('assessment-overall-stats');
-    const assessmentPerformanceBlocks = document.getElementById('assessment-performance-blocks');
-    const addBookWizardBtn = document.getElementById('add-book-wizard-btn');
-    const addBookModal = document.getElementById('add-book-modal');
-    const closeWizardBtn = document.getElementById('close-wizard-btn');
+    const reportsPlaceholder = document.getElementById('reports-placeholder')!;
+    const reportsContent = document.getElementById('reports-content')!;
+    const overallProgressStats = document.getElementById('overall-progress-stats')!;
+    const overallScoreStats = document.getElementById('overall-score-stats')!;
+    const modePerformanceBreakdown = document.getElementById('mode-performance-breakdown')!;
+    const performanceBlocks = document.getElementById('performance-blocks')!;
+    const assessmentSelectFilter = document.getElementById('assessment-select-filter') as HTMLSelectElement;
+    const assessmentReportsPlaceholder = document.getElementById('assessment-reports-placeholder')!;
+    const assessmentReportsContent = document.getElementById('assessment-reports-content')!;
+    const assessmentOverallStats = document.getElementById('assessment-overall-stats')!;
+    const assessmentPerformanceBlocks = document.getElementById('assessment-performance-blocks')!;
+    const addBookWizardBtn = document.getElementById('add-book-wizard-btn')!;
+    const addBookModal = document.getElementById('add-book-modal')!;
+    const closeWizardBtn = document.getElementById('close-wizard-btn')!;
     const wizardStepIndicators = document.querySelectorAll('.wizard-step-indicator');
     const wizardStepContents = document.querySelectorAll('.wizard-step-content');
-    const newBookFileInput = document.getElementById('new-book-file-input');
-    const wizardValidationResults = document.getElementById('wizard-validation-results');
-    const generateManifestBtn = document.getElementById('generate-manifest-btn');
-    const wizardNextBtn = document.getElementById('wizard-next-btn');
-    const overallProgressDashboard = document.getElementById('overall-progress-dashboard');
-    const quickAccessContent = document.getElementById('quick-access-content');
-    const studyTip = document.getElementById('study-tip');
-    const recentActivityLog = document.getElementById('recent-activity-log');
-    const glossaryNavBtn = document.getElementById('glossary-nav-btn');
-    const glossaryModal = document.getElementById('glossary-modal');
-    const glossaryCloseBtn = document.getElementById('glossary-close-btn');
-    const glossarySearchInput = document.getElementById('glossary-search-input');
-    const glossaryAlphabetFilter = document.getElementById('glossary-alphabet-filter');
-    const glossaryList = document.getElementById('glossary-list');
-    const termPopup = document.getElementById('term-popup');
+    const newBookFileInput = document.getElementById('new-book-file-input')!;
+    const wizardValidationResults = document.getElementById('wizard-validation-results')!;
+    const generateManifestBtn = document.getElementById('generate-manifest-btn')!;
+    const wizardNextBtn = document.getElementById('wizard-next-btn') as HTMLButtonElement;
+    const overallProgressDashboard = document.getElementById('overall-progress-dashboard')!;
+    const quickAccessContent = document.getElementById('quick-access-content')!;
+    const studyTip = document.getElementById('study-tip')!;
+    const recentActivityLog = document.getElementById('recent-activity-log')!;
+    const glossaryNavBtn = document.getElementById('glossary-nav-btn')!;
+    const glossaryModal = document.getElementById('glossary-modal')!;
+    const glossaryCloseBtn = document.getElementById('glossary-close-btn')!;
+    const glossarySearchInput = document.getElementById('glossary-search-input') as HTMLInputElement;
+    const glossaryAlphabetFilter = document.getElementById('glossary-alphabet-filter')!;
+    const glossaryList = document.getElementById('glossary-list')!;
+    const termPopup = document.getElementById('term-popup')!;
 
 
-    function loadState() {
-        const savedSettings = JSON.parse(localStorage.getItem('redSealAppSettings'));
-        const savedProgress = JSON.parse(localStorage.getItem('redSealAppProgress'));
-        if (savedSettings) state.settings = savedSettings;
-        if (savedProgress) {
-            state.progress = savedProgress.progress || {};
-            state.assessmentLogs = savedProgress.assessmentLogs || [];
-            state.flaggedQuestions = savedProgress.flaggedQuestions || [];
-            state.completedSections = savedProgress.completedSections || [];
-            state.sessionHistory = savedProgress.sessionHistory || [];
-        }
-    }
+	async function loadState() {
+	  // 1) Local fallback (instant)
+	  try {
+		const savedSettings = JSON.parse(localStorage.getItem('redSealAppSettings') || 'null');
+		const savedProgress = JSON.parse(localStorage.getItem('redSealAppProgress') || 'null');
+		if (savedSettings) state.settings = savedSettings;
+		if (savedProgress) {
+		  state.progress = savedProgress.progress || {};
+		  state.assessmentLogs = savedProgress.assessmentLogs || [];
+		  state.flaggedQuestions = savedProgress.flaggedQuestions || [];
+		  state.completedSections = savedProgress.completedSections || [];
+		  state.sessionHistory = savedProgress.sessionHistory || [];
+		}
+	  } catch (e) { console.warn('Failed to load local state:', e); }
 
-    function saveState() {
-        localStorage.setItem('redSealAppSettings', JSON.stringify(state.settings));
-        localStorage.setItem('redSealAppProgress', JSON.stringify({ 
-            progress: state.progress, 
-            assessmentLogs: state.assessmentLogs, 
-            flaggedQuestions: state.flaggedQuestions,
-            completedSections: state.completedSections,
-            sessionHistory: state.sessionHistory
-        }));
-    }
+	  // 2) Server load (authoritative if logged in)
+	  try {
+		const u = await me();
+		if (!u?.user) return; // not logged in yet; keep local
 
-    function navigateTo(pageId) {
+		// Use a single book_id to store whole app state server-side
+		const SERVER_BOOK_ID = 'APP_STATE';
+		const res = await loadProgress(SERVER_BOOK_ID);
+		const data = res?.data || null;
+		if (data && typeof data === 'object') {
+		  // Merge server data over local
+		  if (data.settings) state.settings = data.settings;
+		  if (data.progress) state.progress = data.progress;
+		  if (Array.isArray(data.assessmentLogs)) state.assessmentLogs = data.assessmentLogs;
+		  if (Array.isArray(data.flaggedQuestions)) state.flaggedQuestions = data.flaggedQuestions;
+		  if (Array.isArray(data.completedSections)) state.completedSections = data.completedSections;
+		  if (Array.isArray(data.sessionHistory)) state.sessionHistory = data.sessionHistory;
+		}
+	  } catch (e) {
+		// If server isn’t available yet, just continue with local data
+		console.warn('Server loadState failed (using local only):', e);
+	  }
+	}
+
+	let saveTimer: number | null = null;
+
+	function saveState() {
+	  // 1) Always save locally (fast)
+	  try {
+		localStorage.setItem('redSealAppSettings', JSON.stringify(state.settings));
+		localStorage.setItem('redSealAppProgress', JSON.stringify({
+		  progress: state.progress,
+		  assessmentLogs: state.assessmentLogs,
+		  flaggedQuestions: state.flaggedQuestions,
+		  completedSections: state.completedSections,
+		  sessionHistory: state.sessionHistory
+		}));
+	  } catch (e) { console.warn('Failed to save local state:', e); }
+
+	  // 2) Debounced server save (if logged in)
+	  if (saveTimer) window.clearTimeout(saveTimer);
+	  saveTimer = window.setTimeout(async () => {
+		try {
+		  const u = await me();
+		  if (!u?.user) return; // not logged in yet
+
+		  const SERVER_BOOK_ID = 'APP_STATE';
+		  await saveProgress(SERVER_BOOK_ID, {
+			settings: state.settings,
+			progress: state.progress,
+			assessmentLogs: state.assessmentLogs,
+			flaggedQuestions: state.flaggedQuestions,
+			completedSections: state.completedSections,
+			sessionHistory: state.sessionHistory
+		  });
+		} catch (e) {
+		  console.warn('Server saveState failed (kept local):', e);
+		}
+	  }, 800); // adjust debounce as you like
+	}
+
+    function navigateTo(pageId: string) {
         state.currentPage = pageId;
         pages.forEach(p => p.classList.remove('active'));
-        document.getElementById(`${pageId}-page`).classList.add('active');
-        navButtons.forEach(b => {
-            let isActive = b.dataset.page === pageId;
+        document.getElementById(`${pageId}-page`)?.classList.add('active');
+        navButtons.forEach((b) => {
+            const el = b as HTMLElement;
+            let isActive = el.dataset.page === pageId;
             if (pageId === 'quiz') {
-                if (state.quiz.mode === 'study' && b.dataset.page === 'study') isActive = true;
-                if (state.quiz.mode === 'quiz' && b.dataset.page === 'quiz-setup') isActive = true;
-                if (state.quiz.mode === 'assessment' && b.dataset.page === 'self-assessment') isActive = true;
+                if (state.quiz.mode === 'study' && el.dataset.page === 'study') isActive = true;
+                if (state.quiz.mode === 'quiz' && el.dataset.page === 'quiz-setup') isActive = true;
+                if (state.quiz.mode === 'assessment' && el.dataset.page === 'self-assessment') isActive = true;
             }
             b.classList.toggle('active', isActive);
         });
@@ -228,6 +407,7 @@ async function main() {
         populateSectionSelector();
         populateQuizSelector();
         populateReviewFilters();
+        populateSubjectFilter(); // MODIFICATION: Call new function
     }
 
     function populateSectionSelector() {
@@ -245,6 +425,45 @@ async function main() {
                 option.textContent += ' ✅ (Completed)';
             }
             sectionSelect.appendChild(option);
+        });
+    }
+
+    // MODIFICATION: Added new function to populate the subject filter
+    function populateSubjectFilter() {
+        const bookId = reviewFilterBook.value;
+        const lang = state.settings.language;
+        reviewFilterSubject.innerHTML = '<option value="all">All Subjects</option>';
+
+        let sections: { id: string; title: string }[] = [];
+        if (bookId === 'all') {
+            // Get all unique sections from all books
+            const allSectionsMap = new Map();
+            ALL_BOOKS_DATA.forEach(book => {
+                book.sections.forEach(section => {
+                    if (!allSectionsMap.has(section.id)) {
+                        allSectionsMap.set(section.id, section.title[lang] || section.title.en);
+                    }
+                });
+            });
+            // Convert map to array for sorting
+            sections = Array.from(allSectionsMap, ([id, title]) => ({ id, title }));
+            sections.sort((a, b) => a.title.localeCompare(b.title));
+        } else {
+            // Get sections for the selected book
+            const book = ALL_BOOKS_DATA.find(b => b.id === bookId);
+            if (book?.sections) {
+                sections = book.sections.map(section => ({
+                    id: section.id,
+                    title: section.title[lang] || section.title.en
+                }));
+            }
+        }
+
+        sections.forEach(section => {
+            const option = document.createElement('option');
+            option.value = section.id;
+            option.textContent = section.title;
+            reviewFilterSubject.appendChild(option);
         });
     }
 
@@ -268,7 +487,7 @@ async function main() {
     
     function populateReviewFilters() {
         reviewFilterMwa.innerHTML = '<option value="all">All Categories</option>';
-        Object.entries(CODEBOOK.mwa).forEach(([key, value]) => {
+        Object.entries(CODEBOOK.mwa).forEach(([key, value]: [string, any]) => {
             const option = document.createElement('option');
             option.value = key;
             option.textContent = `${key}: ${value[state.settings.language] || value.en}`;
@@ -276,7 +495,7 @@ async function main() {
         });
     }
     
-    function highlightTermsInText(text, lang) {
+    function highlightTermsInText(text: string, lang: string) {
         const isQuizActive = state.quiz.isActive;
         const isAllowedQuizMode = isQuizActive && (state.quiz.mode === 'study' || state.quiz.mode === 'quiz');
         const isReviewPage = state.currentPage === 'review';
@@ -296,20 +515,20 @@ async function main() {
             const normalizedMatch = match.toLowerCase();
             const termData = termMap[normalizedMatch];
             if (termData) {
-                return `<span class="glossary-term-highlight" data-term-slug="${termData.slug_en}">${match}</span>`;
+                return `<span class="glossary-term-highlight" data-term-slug="${escapeAttr(termData.slug_en)}">${match}</span>`;
             }
             return match;
         });
     }
 
-    function formatInlineRichText(value, lang) {
+    function formatInlineRichText(value: any, lang: string) {
         if (value === undefined || value === null) return '';
         const normalized = String(value).replace(/\r\n/g, '\n');
         const withBreaks = normalized.replace(/\n/g, '<br>');
         return highlightTermsInText(withBreaks, lang);
     }
 
-    function renderRichListItem(item, lang) {
+    function renderRichListItem(item: any, lang: string): string {
         if (item === undefined || item === null) return '';
         if (Array.isArray(item)) {
             return item.map(child => renderRichListItem(child, lang)).join('');
@@ -330,7 +549,7 @@ async function main() {
         return '';
     }
 
-    function renderRichTextBlock(block, lang) {
+    function renderRichTextBlock(block: any, lang: string): string {
         if (block === undefined || block === null) return '';
         if (typeof block === 'string' || typeof block === 'number' || typeof block === 'boolean') {
             return `<p>${formatInlineRichText(block, lang)}</p>`;
@@ -379,7 +598,7 @@ async function main() {
         }
     }
 
-    function buildRichTextHtml(value, lang) {
+    function buildRichTextHtml(value: any, lang: string): string {
         if (value === undefined || value === null) return '';
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
             const text = String(value).replace(/\r\n/g, '\n');
@@ -398,7 +617,7 @@ async function main() {
         return '';
     }
 
-    function interpretRichText(definition, lang) {
+    function interpretRichText(definition: any, lang: string): { html: string; direction: string | null } {
         if (definition === undefined || definition === null) {
             return { html: '', direction: null };
         }
@@ -442,7 +661,7 @@ async function main() {
         return { html: '', direction: null };
     }
 
-    function resolveLocalizedRichText(content, lang) {
+    function resolveLocalizedRichText(content: any, lang: string): { html: string; direction: string | null } {
         if (!content) return { html: '', direction: null };
 
         if (typeof content === 'string' || Array.isArray(content) || typeof content === 'number' || typeof content === 'boolean') {
@@ -474,7 +693,7 @@ async function main() {
         return interpretRichText(content, lang);
     }
 
-    function applyRichTextToElement(element, content, lang) {
+    function applyRichTextToElement(element: HTMLElement | null, content: any, lang: string) {
         if (!element) return;
         const { html, direction } = resolveLocalizedRichText(content, lang);
         element.innerHTML = html || '';
@@ -485,7 +704,7 @@ async function main() {
         }
     }
 
-    function startQuiz(questions, mode, bookId, contextId) {
+    function startQuiz(questions: any[], mode: string, bookId: string | null, contextId: string | null) {
         let questionsToAttempt = questions;
         if (mode !== 'assessment') {
             questionsToAttempt = questions.filter(q => !state.progress[q.uid]?.modes?.[mode]);
@@ -498,7 +717,7 @@ async function main() {
         state.quiz = { 
             isActive: true, 
             mode, 
-            questions: [...questionsToAttempt].sort(() => 0.5 - Math.random()), 
+            questions: fisherYatesShuffle(questionsToAttempt),
             currentQuestionIndex: 0, 
             timer: 0, 
             timerInterval: null, 
@@ -529,9 +748,9 @@ async function main() {
         submitAnswerBtn.classList.remove('hidden');
         nextQuestionBtn.classList.add('hidden');
         
-        const book = ALL_BOOKS_DATA.find(b => q.uid.startsWith(`B${b.id.replace('book','')}`));
+        const book = getBookForQuestion(q.uid);
         if (book && CODEBOOK) {
-            const { mwa, task } = q.classification;
+            const { mwa, task } = q.classification || { mwa: '', task: '' };
             const mwaText = CODEBOOK.mwa[mwa]?.[state.settings.language] || '';
             const taskText = CODEBOOK.tasks[task]?.[state.settings.language] || '';
             const bookText = book.title[state.settings.language];
@@ -556,23 +775,15 @@ async function main() {
             choicesAR.appendChild(liAR);
         });
         
-        document.querySelectorAll('.choice').forEach(choice => {
-            choice.addEventListener('mouseover', () => document.querySelectorAll(`.choice[data-index="${choice.dataset.index}"]`).forEach(c => c.classList.add('highlight')));
-            choice.addEventListener('mouseout', () => document.querySelectorAll(`.choice[data-index="${choice.dataset.index}"]`).forEach(c => c.classList.remove('highlight')));
-        });
-
-        choicesEN.addEventListener('click', (e) => handleChoiceSelection(e.target.closest('.choice')));
-        choicesAR.addEventListener('click', (e) => handleChoiceSelection(e.target.closest('.choice')));
-        
         updateFlagButton();
         nextQuestionBtn.textContent = (state.quiz.currentQuestionIndex === state.quiz.questions.length - 1) ? "Finish Session" : "Next Question";
         state.quiz.questionStartTime = Date.now();
         startQuizTimer();
     }
 
-    function handleChoiceSelection(target) {
+    function handleChoiceSelection(target: HTMLElement | null) {
         if (!target || state.quiz.currentQuestionAnswered) return;
-        const selectedIndex = parseInt(target.dataset.index);
+        const selectedIndex = parseInt(target.dataset.index ?? '', 10);
         
         if (state.quiz.currentAnswerLog.initial === null) {
             state.quiz.currentAnswerLog.initial = selectedIndex;
@@ -595,10 +806,12 @@ async function main() {
         const timeSpent = Date.now() - state.quiz.questionStartTime;
         
         if (state.quiz.mode !== 'assessment') {
-            const prog = state.progress[q.uid] = state.progress[q.uid] || { correct: 0, incorrect: 0, attempts: 0, totalTime: 0, answerChanges: { ccft: 0, iift: 0, c2i: 0, i2c: 0, i2i: 0 }, modes: {} };
+            // MODIFICATION: Added 'lastAnswer: null' to the default progress object
+            const prog = state.progress[q.uid] = state.progress[q.uid] || { correct: 0, incorrect: 0, attempts: 0, totalTime: 0, answerChanges: { ccft: 0, iift: 0, c2i: 0, i2c: 0, i2i: 0 }, modes: {}, lastAnswer: null };
             prog.attempts++;
             prog.totalTime += timeSpent;
             if(isCorrect) prog.correct++; else prog.incorrect++;
+            prog.lastAnswer = final; // MODIFICATION: Save the last answer here
     
             prog.modes[state.quiz.mode] = prog.modes[state.quiz.mode] || {correct: 0, incorrect: 0, totalTime: 0, attempts: 0};
             prog.modes[state.quiz.mode].correct += isCorrect ? 1 : 0;
@@ -617,15 +830,15 @@ async function main() {
             }
         }
         
-        state.quiz.sessionLog.push({ qId: q.uid, isCorrect, mwa: q.classification.mwa, time: timeSpent, initial, final, correctAnswer: q.correctAnswerIndex});
+        state.quiz.sessionLog.push({ qId: q.uid, isCorrect, mwa: q.classification?.mwa || '', time: timeSpent, initial, final, correctAnswer: q.correctAnswerIndex});
         saveState();
 
         if (state.quiz.mode !== 'assessment') {
             document.querySelectorAll('.choice').forEach(item => {
-                const itemIndex = parseInt(item.dataset.index);
+                const itemIndex = parseInt((item as HTMLElement).dataset.index ?? '', 10);
                 if (itemIndex === q.correctAnswerIndex) item.classList.add('correct');
                 else if (itemIndex === final) item.classList.add('incorrect');
-                item.style.pointerEvents = 'none';
+                (item as HTMLElement).style.pointerEvents = 'none';
             });
     
             applyRichTextToElement(explanationEN, q.explanation, 'en');
@@ -693,7 +906,7 @@ async function main() {
         showSessionSummary(state.quiz.sessionLog, state.quiz.mode);
     }
 
-    function showSessionSummary(sessionLog, mode) {
+    function showSessionSummary(sessionLog: any[], mode: string) {
         const log = sessionLog;
         const total = log.length;
         if (total === 0) { 
@@ -707,10 +920,10 @@ async function main() {
 
         summaryTitle.textContent = `${mode.charAt(0).toUpperCase() + mode.slice(1)} Session Summary`;
         summaryScore.textContent = `${score}%`;
-        summaryCorrect.textContent = correct;
-        summaryIncorrect.textContent = incorrect;
+        summaryCorrect.textContent = String(correct);
+        summaryIncorrect.textContent = String(incorrect);
 
-        const mwaCounts = {};
+        const mwaCounts: Record<string, { c: number; t: number }> = {};
         log.forEach(item => {
             mwaCounts[item.mwa] = mwaCounts[item.mwa] || { c: 0, t: 0 };
             mwaCounts[item.mwa].t++;
@@ -805,7 +1018,7 @@ async function main() {
     
     function generateAssessment() {
         const EXAM_SIZE = 120;
-        const MWA_COUNTS = { A: 15, B: 28, C: 24, D: 13, E: 12, F: 22, G: 6 };
+        const MWA_COUNTS: Record<string, number> = { A: 15, B: 28, C: 24, D: 13, E: 12, F: 22, G: 6 };
         const allQuestions = ALL_BOOKS_DATA.flatMap(b => b.sections.flatMap(s => s.questions));
 
         const previouslyUsedUids = new Set(state.assessmentLogs.flatMap(log => log.questions));
@@ -824,13 +1037,13 @@ async function main() {
             }
         }
 
-        let assessmentQuestions = [];
-        let usedUidsInCurrentGeneration = new Set();
+        let assessmentQuestions: any[] = [];
+        let usedUidsInCurrentGeneration = new Set<string>();
 
         for (const mwa in MWA_COUNTS) {
             const count = MWA_COUNTS[mwa];
-            const mwaQuestions = availableQuestions.filter(q => q.classification.mwa === mwa && !usedUidsInCurrentGeneration.has(q.uid));
-            const picked = mwaQuestions.sort(() => 0.5 - Math.random()).slice(0, count);
+            const mwaQuestions = availableQuestions.filter(q => (q.classification?.mwa || '') === mwa && !usedUidsInCurrentGeneration.has(q.uid));
+            const picked = fisherYatesShuffle(mwaQuestions).slice(0, count);
             assessmentQuestions.push(...picked);
             picked.forEach(q => usedUidsInCurrentGeneration.add(q.uid));
         }
@@ -838,11 +1051,11 @@ async function main() {
         const remainingNeeded = targetSize - assessmentQuestions.length;
         if (remainingNeeded > 0) {
             const remainingPool = availableQuestions.filter(q => !usedUidsInCurrentGeneration.has(q.uid));
-            const topUp = remainingPool.sort(() => 0.5 - Math.random()).slice(0, remainingNeeded);
+            const topUp = fisherYatesShuffle(remainingPool).slice(0, remainingNeeded);
             assessmentQuestions.push(...topUp);
         }
         
-        assessmentQuestions.sort(() => 0.5 - Math.random());
+        assessmentQuestions = fisherYatesShuffle(assessmentQuestions);
         
         const newAssessmentLog = {
             id: `asmt-${Date.now()}`,
@@ -856,7 +1069,7 @@ async function main() {
         startQuiz(assessmentQuestions, 'assessment', null, newAssessmentLog.id);
     }
     
-    function resumeAssessment(assessmentId) {
+    function resumeAssessment(assessmentId: string) {
         const assessmentLog = state.assessmentLogs.find(log => log.id === assessmentId);
         if (!assessmentLog || assessmentLog.status === 'completed') {
             alert("This assessment cannot be resumed.");
@@ -881,7 +1094,7 @@ async function main() {
         state.quiz = { 
             isActive: true, 
             mode: 'assessment', 
-            questions: [...remainingQuestions].sort(() => 0.5 - Math.random()), 
+            questions: fisherYatesShuffle(remainingQuestions), 
             currentQuestionIndex: 0, 
             timer: 0, 
             timerInterval: null, 
@@ -896,14 +1109,14 @@ async function main() {
         navigateTo('quiz');
     }
 
-    function reviewCompletedAssessment(assessmentId) {
+    function reviewCompletedAssessment(assessmentId: string) {
         const assessmentLog = state.assessmentLogs.find(l => l.id === assessmentId);
         if (assessmentLog && assessmentLog.status === 'completed') {
             showSessionSummary(assessmentLog.sessionLog, 'assessment');
         }
     }
 
-    function deleteAssessment(assessmentId) {
+    function deleteAssessment(assessmentId: string) {
         if (confirm("Are you sure you want to delete this assessment? This action cannot be undone.")) {
             state.assessmentLogs = state.assessmentLogs.filter(log => log.id !== assessmentId);
             saveState();
@@ -915,7 +1128,7 @@ async function main() {
     }
 
     function renderSelfAssessmentPage() {
-        const assessmentList = document.getElementById('assessment-list');
+        const assessmentList = document.getElementById('assessment-list')!;
         assessmentList.innerHTML = '';
         if (state.assessmentLogs.length === 0) {
             assessmentList.innerHTML = `<p class="text-slate-500 text-center p-4">You have not generated any self-assessments yet.</p>`;
@@ -938,10 +1151,12 @@ async function main() {
                 resultText = `<div class="font-bold text-sm ${passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${passed ? 'Pass' : 'Fail'}</div>`;
     
                 if (log.startDate && log.endDate) {
-                    const duration = new Date(log.endDate) - new Date(log.startDate);
-                    const minutes = Math.floor((duration / (1000 * 60)) % 60);
-                    const hours = Math.floor(duration / (1000 * 60 * 60));
-                    timeSpentText = `<p class="text-xs text-slate-500 mt-1">Time: ${hours > 0 ? hours+'h ' : ''}${minutes}m</p>`;
+                    const duration = new Date(log.endDate).getTime() - new Date(log.startDate).getTime();
+                    if (!isNaN(duration) && duration > 0) {
+                        const minutes = Math.floor((duration / (1000 * 60)) % 60);
+                        const hours = Math.floor(duration / (1000 * 60 * 60));
+                        timeSpentText = `<p class="text-xs text-slate-500 mt-1">Time: ${hours > 0 ? hours+'h ' : ''}${minutes}m</p>`;
+                    }
                 }
                 actionButtonHTML = `<button data-id="${log.id}" class="review-assessment-btn btn-secondary flex items-center justify-center gap-1 w-24">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20V16"/></svg>
@@ -973,16 +1188,16 @@ async function main() {
             assessmentList.appendChild(assessmentItem);
         });
         
-        document.querySelectorAll('.resume-assessment-btn').forEach(btn => btn.addEventListener('click', (e) => resumeAssessment(e.currentTarget.dataset.id)));
-        document.querySelectorAll('.review-assessment-btn').forEach(btn => btn.addEventListener('click', (e) => reviewCompletedAssessment(e.currentTarget.dataset.id)));
-        document.querySelectorAll('.delete-assessment-btn').forEach(btn => btn.addEventListener('click', (e) => deleteAssessment(e.currentTarget.dataset.id)));
+        document.querySelectorAll('.resume-assessment-btn').forEach(btn => btn.addEventListener('click', () => resumeAssessment((btn as HTMLElement).dataset.id!)));
+        document.querySelectorAll('.review-assessment-btn').forEach(btn => btn.addEventListener('click', () => reviewCompletedAssessment((btn as HTMLElement).dataset.id!)));
+        document.querySelectorAll('.delete-assessment-btn').forEach(btn => btn.addEventListener('click', () => deleteAssessment((btn as HTMLElement).dataset.id!)));
     }
 
-    function collectQuestionPerformance(uid) {
-        const stats = { correct: 0, incorrect: 0, total: 0, modes: new Set() };
+    function collectQuestionPerformance(uid: string) {
+        const stats = { correct: 0, incorrect: 0, total: 0, modes: new Set<string>() };
         const progressEntry = state.progress[uid];
         if (progressEntry && progressEntry.modes) {
-            Object.entries(progressEntry.modes).forEach(([mode, modeStats]) => {
+            Object.entries(progressEntry.modes).forEach(([mode, modeStats]: [string, any]) => {
                 if (mode !== 'assessment' && modeStats) {
                     stats.modes.add(mode);
                     stats.correct += modeStats.correct || 0;
@@ -1010,18 +1225,74 @@ async function main() {
         return stats;
     }
 
+    /**
+     * Finds the last recorded answer for a specific question UID
+     * by searching through session and assessment history.
+     */
+    // MODIFICATION: Rewrote this function to be more robust.
+    // This now correctly finds the single most recent attempt across ALL sessions.
+    function getLastAnswer(uid: string): number | null {
+        // 1. Check the persistent progress object first.
+        // This is the most reliable source as it's saved after every question.
+        const progressEntry = state.progress[uid];
+        if (progressEntry && typeof progressEntry.lastAnswer === 'number' && progressEntry.lastAnswer !== null) {
+            return progressEntry.lastAnswer;
+        }
+
+        // 2. Fallback: Check session history (for sessions that *were* completed)
+        let lastAttempt: any = null;
+        let mostRecentTime = 0;
+
+        // Check non-assessment sessions
+        (state.sessionHistory || []).forEach(session => {
+            if (!session || !session.endTime) return;
+            const sessionEndTime = new Date(session.endTime).getTime();
+            
+            // Find *last* attempt for this UID in this session's log
+            const attempt = (session.sessionLog || []).slice().reverse().find(log => log.qId === uid);
+            
+            if (attempt) {
+                if (sessionEndTime > mostRecentTime) {
+                    mostRecentTime = sessionEndTime;
+                    lastAttempt = attempt;
+                }
+            }
+        });
+
+        // Check assessment logs
+        (state.assessmentLogs || []).forEach(log => {
+            if (!log) return;
+            const assessmentTime = new Date(log.endDate || log.startDate).getTime();
+            
+            // Find *the* attempt for this UID in this log
+            const attempt = (log.sessionLog || []).find(item => item.qId === uid);
+
+            if (attempt) {
+                 // MODIFICATION: Fixed typo "mostRealTime" to "mostRecentTime"
+                 if (assessmentTime > mostRecentTime) {
+                    mostRecentTime = assessmentTime;
+                    lastAttempt = attempt;
+                 }
+            }
+        });
+        
+        // After checking all sessions, return the 'final' answer of the most recent attempt
+        return lastAttempt ? lastAttempt.final : null;
+    }
+
     function renderReviewPage() {
         const lang = state.settings.language;
         const searchTerm = reviewSearch.value.toLowerCase();
         const flaggedOnly = reviewFlaggedOnly.checked;
         const statusFilter = reviewFilterStatus.value;
         const bookFilter = reviewFilterBook.value;
+        const subjectFilter = reviewFilterSubject.value; // MODIFICATION: Get new filter value
         const mwaFilter = reviewFilterMwa.value;
 
         const attemptedUIDSet = new Set();
         Object.entries(state.progress).forEach(([uid, prog]) => {
             const modes = prog?.modes || {};
-            const hasAttempts = Object.entries(modes).some(([mode, stats]) => mode !== 'assessment' && (stats?.attempts || stats?.correct || stats?.incorrect));
+            const hasAttempts = Object.entries(modes).some(([mode, stats]: [string, any]) => mode !== 'assessment' && (stats?.attempts || stats?.correct || stats?.incorrect));
             if (hasAttempts || (prog.correct || 0) + (prog.incorrect || 0) > 0) {
                 attemptedUIDSet.add(uid);
             }
@@ -1064,54 +1335,188 @@ async function main() {
                 const mostlyCorrect = stats.correct >= stats.incorrect;
                 return statusFilter === 'correct' ? mostlyCorrect : !mostlyCorrect;
             })
-            .filter(({ question }) => bookFilter === 'all' || question.uid.startsWith(`B${bookFilter.replace('book', '')}`))
-            .filter(({ question }) => mwaFilter === 'all' || question.classification.mwa === mwaFilter);
+            .filter(({ question }) => bookFilter === 'all' || getBookForQuestion(question.uid)?.id === bookFilter)
+            // MODIFICATION: Add filter logic for subject
+            .filter(({ question }) => {
+                if (subjectFilter === 'all') return true;
+                // Find which section this question belongs to
+                for (const book of ALL_BOOKS_DATA) {
+                    for (const section of book.sections) {
+                        if (section.questions.some(q_in_section => q_in_section.uid === question.uid)) {
+                            return section.id === subjectFilter;
+                        }
+                    }
+                }
+                return false;
+            })
+            .filter(({ question }) => mwaFilter === 'all' || (question.classification?.mwa || '') === mwaFilter);
 
+        // MODIFICATION: Reworked the entire HTML generation for the review list
         reviewList.innerHTML = filteredQuestions.length > 0 ? filteredQuestions.map(({ question: q, stats }) => {
             const isFlagged = state.flaggedQuestions.includes(q.uid);
             const statusIcon = stats.correct === stats.incorrect ? '⏳' : (stats.correct > stats.incorrect ? '✅' : '❌');
-            const book = ALL_BOOKS_DATA.find(b => q.uid.startsWith(`B${b.id.replace('book','')}`));
-            const section = book?.sections.find(s => s.questions.some(qu => qu.uid === q.uid));
+            const book = getBookForQuestion(q.uid);
+            const section = book?.sections.find((s: any) => s.questions.some((qu: any) => qu.uid === q.uid));
             const bookText = book?.title?.[lang] || book?.title?.en || '';
             const sectionText = section?.title?.[lang] || section?.title?.en || '';
-            const mwaText = CODEBOOK.mwa[q.classification.mwa]?.[lang] || CODEBOOK.mwa[q.classification.mwa]?.en || '';
-            const taskText = CODEBOOK.tasks[q.classification.task]?.[lang] || CODEBOOK.tasks[q.classification.task]?.en || '';
+            const qMwa = q.classification?.mwa || '';
+            const qTask = q.classification?.task || '';
+            const mwaText = CODEBOOK.mwa[qMwa]?.[lang] || CODEBOOK.mwa[qMwa]?.en || '';
+            const taskText = CODEBOOK.tasks[qTask]?.[lang] || CODEBOOK.tasks[qTask]?.en || '';
             const modesAttempted = Array.from(stats.modes).filter(mode => mode !== 'assessment').map(mode => `<span class="mode-tag mode-${mode}">${mode}</span>`).join(' ');
 
-            const explanationEn = resolveLocalizedRichText(q.explanation, 'en');
-            const explanationAr = resolveLocalizedRichText(q.explanation, 'ar');
-            const englishExplanation = explanationEn.html ? `<div class="mb-4"><p class="font-bold mb-2">Explanation:</p><div class="rich-text"${explanationEn.direction ? ` dir="${explanationEn.direction}"` : ''}>${explanationEn.html}</div></div>` : '';
-            const arabicExplanation = explanationAr.html ? `<div class="rtl"><p class="font-bold mt-4 mb-2">:الشرح</p><div class="rich-text"${explanationAr.direction ? ` dir="${explanationAr.direction}"` : ''}>${explanationAr.html}</div></div>` : '';
+            const lastAnswer = getLastAnswer(q.uid);
+            
+            // Generate English choices HTML
+            const enChoicesHtml = q.choices.map((choice, index) => {
+                const isCorrect = index === q.correctAnswerIndex;
+                const isSelected = index === lastAnswer;
+                
+                let choiceClass = 'review-choice-item p-3 rounded-lg border text-sm';
+                if (isCorrect) {
+                    // Correct answer
+                    choiceClass += ' border-green-500 bg-green-50 dark:bg-green-900/50 font-semibold';
+                } else if (isSelected) {
+                    // User's incorrect selection
+                    choiceClass += ' border-red-500 bg-red-50 dark:bg-red-900/50 opacity-70 line-through';
+                } else {
+                    // Other incorrect/unselected answers
+                    choiceClass += ' border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 opacity-60';
+                }
 
+                return `<li class="${choiceClass}">
+                            ${String.fromCharCode(65 + index)}. ${highlightTermsInText(choice.en, 'en')}
+                        </li>`;
+            }).join('');
+            
+            // Generate Arabic choices HTML
+            const arChoicesHtml = q.choices.map((choice, index) => {
+                const isCorrect = index === q.correctAnswerIndex;
+                const isSelected = index === lastAnswer;
+
+                let choiceClass = 'review-choice-item p-3 rounded-lg border text-sm';
+                if (isCorrect) {
+                    // Correct answer
+                    choiceClass += ' border-green-500 bg-green-50 dark:bg-green-900/50 font-semibold';
+                } else if (isSelected) {
+                    // User's incorrect selection
+                    choiceClass += ' border-red-500 bg-red-50 dark:bg-red-900/50 opacity-70 line-through';
+                } else {
+                    // Other incorrect/unselected answers
+                    choiceClass += ' border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 opacity-60';
+                }
+                
+                return `<li class="${choiceClass}">
+                            (${['أ', 'ب', 'ج', 'د'][index]}) ${highlightTermsInText(choice.ar, 'ar')}
+                        </li>`;
+            }).join('');
+            
+            // MODIFICATION: Add classes for flagged state
+            const headerClasses = "p-3 bg-slate-50 dark:bg-slate-800 border-b border-[var(--border-color)] flex justify-between items-start gap-4";
+            const flaggedClass = isFlagged ? ' bg-amber-50 dark:bg-amber-900/50 border-amber-300 dark:border-amber-700' : '';
+            const flagIconColor = isFlagged ? 'text-amber-600 dark:text-amber-400' : 'text-indigo-600';
+
+
+            // Return the full question card
             return `
-                <details class="border-b border-[var(--border-color)]">
-                    <summary class="p-4 cursor-pointer grid grid-cols-12 gap-4 items-center">
-                        <div class="col-span-1 text-center">${isFlagged ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="text-indigo-600 inline-block"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>' : ''}</div>
-                        <div class="col-span-8">
-                            <p class="font-semibold text-sm truncate">${highlightTermsInText(q.question[lang] || q.question.en, lang)}</p>
-                            <div class="text-xs text-slate-500 mt-1 space-y-0.5">
-                                <div><strong>Book:</strong> ${bookText} &bull; <strong>Subject:</strong> ${sectionText}</div>
-                                <div><strong>Category:</strong> ${q.classification.mwa} - ${mwaText}</div>
-                                <div><strong>Task:</strong> ${q.classification.task} - ${taskText}</div>
+                <div class="review-question-card border border-[var(--border-color)] rounded-lg overflow-hidden mb-4 ${isFlagged ? 'border-amber-300 dark:border-amber-700' : ''}">
+                    <!-- Header: Info, Stats, Flag -->
+                    <div class="${headerClasses} ${flaggedClass}">
+                        <div class="flex-grow">
+                            <p class="text-xs text-slate-500"><strong>Book:</strong> ${bookText} &bull; <strong>Subject:</strong> ${sectionText}</p>
+                            <p class="text-xs text-slate-500"><strong>Category:</strong> ${qMwa} - ${mwaText}</p>
+                            <p class="text-xs text-slate-500 mt-1"><strong>UID:</strong> ${q.uid}</p>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <div class="flex items-center justify-end gap-3">
+                                <span class="text-xs">${stats.correct}C / ${stats.incorrect}I</span>
+                                <span class="text-xl" title="Performance">${statusIcon}</span>
+                                ${isFlagged ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="${flagIconColor} inline-block" title="Flagged"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>` : ''}
                             </div>
+                            <div class="text-xs truncate mt-1">${modesAttempted}</div>
                         </div>
-                        <div class="col-span-2 text-xs truncate">${modesAttempted}</div>
-                        <div class="col-span-1 text-xl text-right">${statusIcon}</div>
-                    </summary>
-                    <div class="p-4 bg-slate-50 dark:bg-slate-800 border-t border-[var(--border-color)]">
-                         <p class="text-xs text-slate-500 mb-4"><strong>UID:</strong> ${q.uid}</p>
-                        <div class="mb-4">
-                            <p class="font-bold mb-2">Correct Answer:</p>
-                            <p class="mb-2">${String.fromCharCode(65 + q.correctAnswerIndex)}. ${highlightTermsInText(q.choices[q.correctAnswerIndex].en, 'en')}</p>
-                            <p class="rtl font-bold mb-2">:الإجابة الصحيحة</p>
-                            <p class="rtl">${highlightTermsInText(q.choices[q.correctAnswerIndex].ar, 'ar')}</p>
-                        </div>
-                        <hr class="my-4 border-[var(--border-color)]">
-                        ${englishExplanation}
-                        ${arabicExplanation}
                     </div>
-                </details>`;
+
+                    <!-- Body: Question, Choices -->
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <!-- English Column -->
+                        <div class="ltr">
+                            <p class="font-semibold mb-3">${highlightTermsInText(q.question.en, 'en')}</p>
+                            <ul class="space-y-2">
+                                ${enChoicesHtml}
+                            </ul>
+                        </div>
+
+                        <!-- Arabic Column -->
+                        <div class="rtl text-right">
+                            <p class="font-semibold mb-3">${highlightTermsInText(q.question.ar, 'ar')}</p>
+                            <ul class="space-y-2">
+                                ${arChoicesHtml}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Footer: Explanation Icons -->
+                    <div class="p-3 border-t border-[var(--border-color)] bg-slate-50 dark:bg-slate-800 flex items-center gap-4">
+                        <h4 class="font-semibold text-sm">Explanation:</h4>
+                        <!-- MODIFICATION: Replaced icons with Globe (EN) and Languages (AR) -->
+                        <button class="review-explanation-btn p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700" data-lang="en" data-uid="${q.uid}" title="Show English Explanation">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600 dark:text-slate-300">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                        </button>
+                        <button class="review-explanation-btn p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700" data-lang="ar" data-uid="${q.uid}" title="Show Arabic Explanation">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600 dark:text-slate-300">
+                                <path d="m5 8 6 6"></path>
+                                <path d="m4 14 6-6 2-3"></path>
+                                <path d="M2 5h12"></path>
+                                <path d="M7 2h1"></path>
+                                <path d="m22 22-5-10-5 10"></path>
+                                <path d="M14 18h6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
         }).join('') : `<p class="text-slate-500 text-center p-4">No questions match your current filters.</p>`;
+    
+        // Add event listener for explanation buttons using event delegation
+        reviewList.querySelectorAll('.review-explanation-btn').forEach(btn => {
+            const el = btn as HTMLElement;
+            btn.addEventListener('click', () => showReviewExplanation(el.dataset.uid!, el.dataset.lang!));
+        });
+    }
+
+    /**
+     * Shows a popup with the explanation for a given question and language.
+     * Re-uses the glossary modal.
+     */
+    function showReviewExplanation(uid: string, lang: string) {
+        const allQuestions = ALL_BOOKS_DATA.flatMap(b => b.sections.flatMap(s => s.questions));
+        const question = allQuestions.find(q => q.uid === uid);
+        if (!question) return;
+
+        // Get the rich text HTML for the explanation
+        const { html, direction } = resolveLocalizedRichText(question.explanation, lang);
+        
+        // Hijack the glossary modal to show the explanation
+        const glossaryModalTitle = glossaryModal.querySelector('h2');
+        if (glossaryModalTitle) {
+            glossaryModalTitle.textContent = `Explanation (${lang.toUpperCase()})`;
+        }
+        glossarySearchInput.style.display = 'none';
+        glossaryAlphabetFilter.style.display = 'none';
+        
+        if (html) {
+            glossaryList.innerHTML = `<div class="rich-text p-4"${direction ? ` dir="${direction}"` : ''}>${html}</div>`;
+        } else {
+            glossaryList.innerHTML = `<p class="text-center text-slate-500 p-4">No explanation available for this language.</p>`;
+        }
+        
+        glossaryList.scrollTop = 0; // Scroll to top
+        glossaryModal.classList.remove('hidden');
     }
 
     function renderReportsPage() {
@@ -1120,7 +1525,7 @@ async function main() {
     }
     
     function renderOverallReports() {
-        if (typeof Chart === 'undefined') return;
+        if (!Chart) return;
     
         const bookFilter = reportBookFilter.value;
         const modeFilter = reportModeFilter.value === 'assessment' ? 'all' : reportModeFilter.value;
@@ -1138,8 +1543,8 @@ async function main() {
             const question = allQuestionsInDB.find(q => q.uid === uid);
             if (!question) return false;
             
-            const bookIdForQuestion = `book${uid.charAt(1)}`; 
-            const bookMatch = (bookFilter === 'all') || (bookIdForQuestion === bookFilter);
+            const bookForQ = getBookForQuestion(uid);
+            const bookMatch = (bookFilter === 'all') || (bookForQ?.id === bookFilter);
             
             const modeMatch = (modeFilter === 'all') || (prog.modes && prog.modes[modeFilter]);
     
@@ -1220,18 +1625,21 @@ async function main() {
                 const q = allQuestionsInDB.find(q => q.uid === uid);
                 if(!q) return;
                 let categoryId;
-                if (key === 'book') categoryId = `book${uid.charAt(1)}`;
-                else if (key === 'subject') {
-                    const book = ALL_BOOKS_DATA.find(b => b.id === `book${uid.charAt(1)}`);
-                    const section = book.sections.find(s => s.questions.some(qu => qu.uid === q.uid));
+                if (key === 'book') {
+                    const bk = getBookForQuestion(uid);
+                    categoryId = bk?.id;
+                } else if (key === 'subject') {
+                    const bk = getBookForQuestion(uid);
+                    if (!bk) return;
+                    const section = bk.sections.find((s: any) => s.questions.some((qu: any) => qu.uid === q.uid));
                     categoryId = section?.id;
                 }
-                else if (key === 'mwa') categoryId = q.classification.mwa;
-                else if (key === 'task') categoryId = q.classification.task;
-                
+                else if (key === 'mwa') categoryId = q.classification?.mwa || 'Uncategorized';
+                else if (key === 'task') categoryId = q.classification?.task || 'Uncategorized';
+
                 if (!categoryId) return;
                 data[categoryId] = data[categoryId] || { c: 0, i: 0 };
-    
+
                 const modesToConsider = (modeFilter === 'all') ? ['study', 'quiz'] : [modeFilter];
                 modesToConsider.forEach(mode => {
                     if (prog.modes?.[mode]) {
@@ -1284,7 +1692,7 @@ async function main() {
         `;
     
         const mwaLabels = Object.keys(CODEBOOK.mwa).sort();
-        const mwaChartCtx = document.getElementById('mwa-chart').getContext('2d');
+        const mwaChartCtx = (document.getElementById('mwa-chart') as HTMLCanvasElement).getContext('2d')!;
         if (window.mwaChart) window.mwaChart.destroy();
         window.mwaChart = new Chart(mwaChartCtx, {
             type: 'bar', data: {
@@ -1303,8 +1711,8 @@ async function main() {
                         callbacks: {
                             label: function(context) {
                                 const label = context.dataset.label || '';
-                                const value = context.raw;
-                                const total = context.chart.data.datasets.reduce((acc, dataset) => acc + (dataset.data[context.dataIndex] || 0), 0);
+                                const value = context.raw as number;
+                                const total = context.chart.data.datasets.reduce((acc: number, dataset) => acc + ((dataset.data[context.dataIndex] as number) || 0), 0);
                                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                                 return `${label}: ${value} (${percentage}%)`;
                             }
@@ -1324,7 +1732,7 @@ async function main() {
             changeData.i2i += changes.i2i || 0;
         });
         
-        const changeChartCtx = document.getElementById('change-chart').getContext('2d');
+        const changeChartCtx = (document.getElementById('change-chart') as HTMLCanvasElement).getContext('2d')!;
         if(window.changeChart) window.changeChart.destroy();
         window.changeChart = new Chart(changeChartCtx, {
             type: 'doughnut', data: {
@@ -1341,8 +1749,8 @@ async function main() {
                         callbacks: {
                             label: function(context) {
                                 const label = context.label || '';
-                                const value = context.raw;
-                                const total = context.chart.data.datasets[0].data.reduce((acc, val) => acc + val, 0);
+                                const value = context.raw as number;
+                                const total = context.chart.data.datasets[0].data.reduce((acc: number, val) => acc + (val as number), 0);
                                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                                 return `${label}: ${value} (${percentage}%)`;
                             }
@@ -1415,15 +1823,18 @@ async function main() {
                 if(!q) return;
 
                 let categoryId;
-                if (key === 'book') categoryId = `book${q.uid.charAt(1)}`;
-                else if (key === 'subject') {
-                    const book = ALL_BOOKS_DATA.find(b => b.id === `book${q.uid.charAt(1)}`);
-                    const section = book.sections.find(s => s.questions.some(qu => qu.uid === q.uid));
+                if (key === 'book') {
+                    const bk = getBookForQuestion(q.uid);
+                    categoryId = bk?.id;
+                } else if (key === 'subject') {
+                    const bk = getBookForQuestion(q.uid);
+                    if (!bk) return;
+                    const section = bk.sections.find((s: any) => s.questions.some((qu: any) => qu.uid === q.uid));
                     categoryId = section?.id;
                 }
-                else if (key === 'mwa') categoryId = q.classification.mwa;
-                else if (key === 'task') categoryId = q.classification.task;
-                
+                else if (key === 'mwa') categoryId = q.classification?.mwa || 'Uncategorized';
+                else if (key === 'task') categoryId = q.classification?.task || 'Uncategorized';
+
                 if (!categoryId) return;
                 data[categoryId] = data[categoryId] || { c: 0, i: 0 };
                 if (item.isCorrect) data[categoryId].c++;
@@ -1473,7 +1884,7 @@ async function main() {
         `;
 
         const mwaLabels = Object.keys(CODEBOOK.mwa).sort();
-        const assessmentMwaChartCtx = document.getElementById('assessment-mwa-chart').getContext('2d');
+        const assessmentMwaChartCtx = (document.getElementById('assessment-mwa-chart') as HTMLCanvasElement).getContext('2d')!;
         if (window.assessmentMwaChart) window.assessmentMwaChart.destroy();
         window.assessmentMwaChart = new Chart(assessmentMwaChartCtx, {
             type: 'bar', data: {
@@ -1492,8 +1903,8 @@ async function main() {
                         callbacks: {
                             label: function(context) {
                                 const label = context.dataset.label || '';
-                                const value = context.raw;
-                                const total = context.chart.data.datasets.reduce((acc, dataset) => acc + (dataset.data[context.dataIndex] || 0), 0);
+                                const value = context.raw as number;
+                                const total = context.chart.data.datasets.reduce((acc: number, dataset) => acc + ((dataset.data[context.dataIndex] as number) || 0), 0);
                                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                                 return `${label}: ${value} (${percentage}%)`;
                             }
@@ -1516,7 +1927,7 @@ async function main() {
             }
         });
 
-        const assessmentChangeChartCtx = document.getElementById('assessment-change-chart').getContext('2d');
+        const assessmentChangeChartCtx = (document.getElementById('assessment-change-chart') as HTMLCanvasElement).getContext('2d')!;
         if(window.assessmentChangeChart) window.assessmentChangeChart.destroy();
         window.assessmentChangeChart = new Chart(assessmentChangeChartCtx, {
             type: 'doughnut', data: {
@@ -1533,8 +1944,8 @@ async function main() {
                         callbacks: {
                             label: function(context) {
                                 const label = context.label || '';
-                                const value = context.raw;
-                                const total = context.chart.data.datasets[0].data.reduce((acc, val) => acc + val, 0);
+                                const value = context.raw as number;
+                                const total = context.chart.data.datasets[0].data.reduce((acc: number, val) => acc + (val as number), 0);
                                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                                 return `${label}: ${value} (${percentage}%)`;
                             }
@@ -1572,7 +1983,7 @@ async function main() {
             <button data-page="quiz-setup" class="nav-btn w-full btn-secondary">Start a Quiz</button>
             <button data-page="self-assessment" class="nav-btn w-full btn-primary">New Self-Assessment</button>
         `;
-        document.querySelectorAll('#quick-access-content .nav-btn').forEach(b => b.addEventListener('click', () => navigateTo(b.dataset.page)));
+        document.querySelectorAll('#quick-access-content .nav-btn').forEach(b => b.addEventListener('click', () => navigateTo((b as HTMLElement).dataset.page!)));
 
         const tips = ["Review flagged questions regularly.", "Focus on your weakest categories in the reports.", "Take a full self-assessment to simulate exam conditions."];
         studyTip.textContent = tips[Math.floor(Math.random() * tips.length)];
@@ -1596,7 +2007,7 @@ async function main() {
         }));
 
         const allActivities = [...assessmentActivities, ...sessionActivities];
-        allActivities.sort((a, b) => b.date - a.date);
+        allActivities.sort((a, b) => b.date.getTime() - a.date.getTime());
 
         if (allActivities.length === 0) {
             recentActivityLog.innerHTML = `<p class="text-slate-500 text-center text-sm">No recent activity to show.</p>`;
@@ -1620,7 +2031,7 @@ async function main() {
                         const total = sessionLog.length;
                         const score = total > 0 ? Math.round((correct / total) * 100) : 0;
                         const passed = score >= 70;
-                        const duration = new Date(activity.data.endDate) - new Date(activity.data.startDate);
+                        const duration = new Date(activity.data.endDate).getTime() - new Date(activity.data.startDate).getTime();
                         const minutes = Math.floor((duration / (1000 * 60)) % 60);
                         const hours = Math.floor(duration / (1000 * 60 * 60));
 
@@ -1642,7 +2053,7 @@ async function main() {
                     const total = sessionLog.length;
                     const score = total > 0 ? Math.round((correct / total) * 100) : 0;
                     const passed = score >= 70;
-                    const duration = new Date(endTime) - new Date(startTime);
+                    const duration = new Date(endTime).getTime() - new Date(startTime).getTime();
                     const minutes = Math.floor((duration / (1000 * 60)) % 60);
                     const hours = Math.floor(duration / (1000 * 60 * 60));
 
@@ -1665,11 +2076,12 @@ async function main() {
             }).join('');
         }
 
-        document.querySelectorAll('.recent-activity-item').forEach(item => {
+        document.querySelectorAll('.recent-activity-item').forEach(el => {
+            const item = el as HTMLElement;
             if (item.dataset.resumeAssessmentId) {
-                item.addEventListener('click', () => resumeAssessment(item.dataset.resumeAssessmentId));
+                item.addEventListener('click', () => resumeAssessment(item.dataset.resumeAssessmentId!));
             } else if (item.dataset.reviewAssessmentId) {
-                item.addEventListener('click', () => reviewCompletedAssessment(item.dataset.reviewAssessmentId));
+                item.addEventListener('click', () => reviewCompletedAssessment(item.dataset.reviewAssessmentId!));
             } else if (item.dataset.reviewSessionId) {
                 item.addEventListener('click', () => {
                     const session = state.sessionHistory.find(s => s.startTime === item.dataset.reviewSessionId);
@@ -1678,7 +2090,7 @@ async function main() {
             }
         });
         
-        const mwaData = {};
+        const mwaData: Record<string, { c: number; i: number }> = {};
         const allQuestionsInDB = ALL_BOOKS_DATA.flatMap(b => b.sections.flatMap(s => s.questions));
         
         Object.entries(state.progress).forEach(([uid, prog]) => {
@@ -1687,7 +2099,7 @@ async function main() {
         
             const q = allQuestionsInDB.find(q => q.uid === uid);
             if (q) {
-                const mwa = q.classification.mwa;
+                const mwa = q.classification?.mwa || '';
                 mwaData[mwa] = mwaData[mwa] || {c: 0, i: 0};
                 mwaData[mwa].c += (prog.modes.study?.correct || 0) + (prog.modes.quiz?.correct || 0);
                 mwaData[mwa].i += (prog.modes.study?.incorrect || 0) + (prog.modes.quiz?.incorrect || 0);
@@ -1695,7 +2107,7 @@ async function main() {
         });
         
         const mwaLabels = Object.keys(CODEBOOK.mwa).sort();
-        const dashboardMwaChartCtx = document.getElementById('dashboard-mwa-chart').getContext('2d');
+        const dashboardMwaChartCtx = (document.getElementById('dashboard-mwa-chart') as HTMLCanvasElement).getContext('2d')!;
         if (window.dashboardMwaChart) window.dashboardMwaChart.destroy();
         window.dashboardMwaChart = new Chart(dashboardMwaChartCtx, {
             type: 'radar',
@@ -1726,7 +2138,7 @@ async function main() {
 
     function openWizard() {
         wizardState = { currentStep: 1, newBookData: null, newBookFileName: null };
-        newBookFileInput.value = '';
+        (newBookFileInput as HTMLInputElement).value = '';
         updateWizardUI(1);
         addBookModal.classList.remove('hidden');
     }
@@ -1742,13 +2154,13 @@ async function main() {
         wizardStepIndicators.forEach((indicator, index) => {
             const span = indicator.querySelector('span');
             indicator.classList.remove('active');
-            span.classList.remove('bg-indigo-100', 'dark:bg-indigo-800');
-            span.classList.add('bg-gray-100', 'dark:bg-gray-700');
+            span?.classList.remove('bg-indigo-100', 'dark:bg-indigo-800');
+            span?.classList.add('bg-gray-100', 'dark:bg-gray-700');
             if ((index + 1) < step) {
                 indicator.classList.add('active');
             } else if ((index + 1) === step) {
-                span.classList.remove('bg-gray-100', 'dark:bg-gray-700');
-                span.classList.add('bg-indigo-100', 'dark:bg-indigo-800');
+                span?.classList.remove('bg-gray-100', 'dark:bg-gray-700');
+                span?.classList.add('bg-indigo-100', 'dark:bg-indigo-800');
             }
         });
 
@@ -1762,18 +2174,19 @@ async function main() {
         else wizardNextBtn.classList.remove('hidden');
     }
 
-    function handleFileUpload(event) {
-        const file = event.target.files[0];
+    function handleFileUpload(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
         if (!file) return;
 
         wizardState.newBookFileName = file.name;
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                wizardState.newBookData = JSON.parse(e.target.result);
+                wizardState.newBookData = JSON.parse((e.target as FileReader).result as string);
                 wizardNextBtn.disabled = false;
-            } catch (err) {
-                alert(`Error parsing JSON file: ${err.message}`);
+            } catch (err: any) {
+                alert(`Error parsing JSON file: ${err?.message}`);
                 wizardState.newBookData = null;
                 wizardNextBtn.disabled = true;
             }
@@ -1792,7 +2205,7 @@ async function main() {
 
     function validateNewBook() {
         const data = wizardState.newBookData;
-        let errors = [], warnings = [];
+        let errors: string[] = [], warnings: string[] = [];
         
         const ok = (msg) => `<div class="text-green-600 dark:text-green-400 text-sm p-1">✅ ${msg}</div>`;
         const err = (msg) => { errors.push(msg); return `<div class="text-red-600 dark:text-red-400 text-sm p-1">❌ ${msg}</div>`; };
@@ -1855,7 +2268,7 @@ async function main() {
         a.textContent = 'Download updated data.json';
         a.className = 'btn-secondary w-full text-center block';
         
-        const downloadArea = document.getElementById('wizard-download-area');
+        const downloadArea = document.getElementById('wizard-download-area')!;
         downloadArea.innerHTML = '';
         downloadArea.appendChild(a);
         a.click();
@@ -1880,7 +2293,7 @@ async function main() {
         }
     }
     
-    function renderGlossary(filter = '', type = 'search') {
+    function renderGlossary(filter: string = '', type: string = 'search') {
         let filteredTerms = GLOSSARY_TERMS;
         if (type === 'letter') {
             filteredTerms = GLOSSARY_TERMS.filter(term => term.letter.toUpperCase() === filter.toUpperCase());
@@ -1908,7 +2321,7 @@ async function main() {
             </div>`).join('') : '<p class="text-center text-slate-500">No terms found.</p>';
     }
     
-    function renderPopupContent(displayLang) {
+    function renderPopupContent(displayLang: string) {
         if (!currentPopupTermData) return;
         const otherLang = displayLang === 'en' ? 'ar' : 'en';
         const term = currentPopupTermData[`term_${displayLang}`];
@@ -1922,10 +2335,11 @@ async function main() {
         `;
     }
 
-    function showTermPopup(event) {
-        const target = event.target.closest('.glossary-term-highlight');
+    function showTermPopup(event: Event) {
+        const evtTarget = event.target as HTMLElement;
+        const target = evtTarget.closest('.glossary-term-highlight') as HTMLElement | null;
         if (!target) {
-            if (!termPopup.contains(event.target)) {
+            if (!termPopup.contains(evtTarget)) {
                  termPopup.classList.add('hidden');
                  currentPopupTermData = null;
             }
@@ -1956,13 +2370,14 @@ async function main() {
 
 
     navButtons.forEach(button => button.addEventListener('click', () => {
-        if (button.dataset.page) {
-            navigateTo(button.dataset.page);
+        const el = button as HTMLElement;
+        if (el.dataset.page) {
+            navigateTo(el.dataset.page);
         }
     }));
-    usernameInput.addEventListener('change', e => { state.settings.username = e.target.value; saveState(); applySettings(); });
-    languageSelect.addEventListener('change', e => { state.settings.language = e.target.value; saveState(); applySettings(); populateBookSelector(); renderReviewPage(); });
-    themeToggle.addEventListener('change', e => { state.settings.theme = e.target.checked ? 'dark' : 'light'; saveState(); applySettings(); });
+    usernameInput.addEventListener('change', () => { state.settings.username = usernameInput.value; saveState(); applySettings(); });
+    languageSelect.addEventListener('change', () => { state.settings.language = languageSelect.value; saveState(); applySettings(); populateBookSelector(); renderReviewPage(); });
+    themeToggle.addEventListener('change', () => { state.settings.theme = themeToggle.checked ? 'dark' : 'light'; saveState(); applySettings(); });
     resetProgressBtn.addEventListener('click', () => {
         if (confirm("Are you sure? This will erase all study and assessment history.")) {
             state.progress = {}; state.assessmentLogs = []; state.flaggedQuestions = []; state.completedSections = []; state.sessionHistory = [];
@@ -1995,6 +2410,44 @@ async function main() {
         lockAndGradeAnswer();
     });
     nextQuestionBtn.addEventListener('click', advanceQuiz);
+	const skipQuestionBtn = document.getElementById('skip-question-btn');
+skipQuestionBtn?.addEventListener('click', () => {
+    // For assessment mode only:
+    if (state.quiz.mode === 'assessment') {
+        // Record skipped question
+        const skippedQ = state.quiz.questions[state.quiz.currentQuestionIndex];
+        state.quiz.sessionLog.push({
+            qId: skippedQ.uid,
+            skipped: true,
+            answer: null,
+            isCorrect: false,
+            mwa: skippedQ.classification?.mwa || '',
+            timeSpent: Date.now() - state.quiz.questionStartTime
+        });
+
+        // Move forward
+        advanceQuiz();
+    } else {
+        alert("Skipping is only allowed in Self-Assessment mode.");
+    }
+});
+    // Event delegation for choice hover/click (set up once, not per question)
+    const questionContainer = document.getElementById('question-container');
+    questionContainer?.addEventListener('mouseover', (e: Event) => {
+        const target = (e.target as HTMLElement).closest('.choice') as HTMLElement | null;
+        if (!target) return;
+        document.querySelectorAll(`.choice[data-index="${target.dataset.index}"]`).forEach(c => c.classList.add('highlight'));
+    });
+    questionContainer?.addEventListener('mouseout', (e: Event) => {
+        const target = (e.target as HTMLElement).closest('.choice') as HTMLElement | null;
+        if (!target) return;
+        document.querySelectorAll(`.choice[data-index="${target.dataset.index}"]`).forEach(c => c.classList.remove('highlight'));
+    });
+    questionContainer?.addEventListener('click', (e: Event) => {
+        const target = (e.target as HTMLElement).closest('.choice') as HTMLElement | null;
+        if (target) handleChoiceSelection(target);
+    });
+
     endSessionBtn.addEventListener('click', () => {
         if(confirm("Are you sure you want to end this session?")) { stopQuizTimer(); navigateTo('dashboard'); }
     });
@@ -2024,15 +2477,28 @@ async function main() {
     reportBookFilter.addEventListener('change', renderOverallReports);
     reportModeFilter.addEventListener('change', renderOverallReports);
     assessmentSelectFilter.addEventListener('change', renderAssessmentReports);
-    [reviewSearch, reviewFlaggedOnly, reviewFilterStatus, reviewFilterBook, reviewFilterMwa].forEach(el => el.addEventListener('input', renderReviewPage));
+    
+    // MODIFICATION: Replaced forEach with individual listeners for clarity
+    reviewSearch.addEventListener('input', renderReviewPage);
+    reviewFlaggedOnly.addEventListener('change', renderReviewPage);
+    reviewFilterStatus.addEventListener('change', renderReviewPage);
+    reviewFilterBook.addEventListener('change', () => {
+        populateSubjectFilter(); // Repopulate subjects when book changes
+        renderReviewPage();
+    });
+    reviewFilterSubject.addEventListener('change', renderReviewPage); // Add listener for new filter
+    reviewFilterMwa.addEventListener('change', renderReviewPage);
+    
     resetFiltersBtn.addEventListener('click', () => {
         reviewSearch.value = ''; reviewFlaggedOnly.checked = false; reviewFilterStatus.value = 'all'; reviewFilterBook.value = 'all'; reviewFilterMwa.value = 'all';
+        reviewFilterSubject.value = 'all'; // Reset new filter
+        populateSubjectFilter(); // Repopulate subjects for 'all books'
         renderReviewPage();
     });
     
     reportTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            const tabName = tab.dataset.tab;
+            const tabName = (tab as HTMLElement).dataset.tab;
             reportTabs.forEach(t => t.classList.remove('active', 'border-indigo-500', 'text-indigo-600'));
             reportTabs.forEach(t => t.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300'));
             tab.classList.add('active', 'border-indigo-500', 'text-indigo-600');
@@ -2052,16 +2518,27 @@ async function main() {
     wizardNextBtn.addEventListener('click', advanceWizard);
     generateManifestBtn.addEventListener('click', generateNewManifest);
     
+    // MODIFICATION: Update glossary button to reset modal state
     glossaryNavBtn.addEventListener('click', () => {
+        const glossaryModalTitle = glossaryModal.querySelector('h2');
+        if (glossaryModalTitle) {
+            glossaryModalTitle.textContent = 'Glossary of Auto Body Terms';
+        }
+        glossarySearchInput.style.display = 'block';
+        glossaryAlphabetFilter.style.display = 'flex';
         renderGlossary();
         glossaryModal.classList.remove('hidden');
     });
     glossaryCloseBtn.addEventListener('click', () => glossaryModal.classList.add('hidden'));
-    glossarySearchInput.addEventListener('input', (e) => renderGlossary(e.target.value, 'search'));
+    glossarySearchInput.addEventListener('input', () => renderGlossary(glossarySearchInput.value, 'search'));
 
     function init() {
         if (!ALL_BOOKS_DATA || ALL_BOOKS_DATA.length === 0) {
-             document.body.innerHTML = `<div class="p-8 text-center bg-red-100 text-red-800 rounded-lg"><strong>Error:</strong> No book data found.</div>`;
+            document.body.textContent = '';
+            const errDiv = document.createElement('div');
+            errDiv.className = 'p-8 text-center bg-red-100 text-red-800 rounded-lg';
+            errDiv.innerHTML = '<strong>Error:</strong> No book data found.';
+            document.body.appendChild(errDiv);
             return;
         }
         loadState();
@@ -2069,8 +2546,8 @@ async function main() {
         populateBookSelector();
         prepareGlossary();
         const firstTab = document.querySelector('.report-tab');
-        firstTab.classList.add('active', 'border-indigo-500', 'text-indigo-600');
-        firstTab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+        firstTab?.classList.add('active', 'border-indigo-500', 'text-indigo-600');
+        firstTab?.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
         reportTabContents[0].classList.remove('hidden');
 
         const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -2078,18 +2555,19 @@ async function main() {
             const button = document.createElement('button');
             button.textContent = letter;
             button.className = "p-1 px-3 rounded-md border border-[var(--border-color)] hover:bg-indigo-200 dark:hover:bg-indigo-700";
-            button.addEventListener('click', (e) => {
+            button.addEventListener('click', (e: Event) => {
                  document.querySelectorAll('#glossary-alphabet-filter button').forEach(b => b.classList.remove('active'));
-                 e.currentTarget.classList.add('active');
+                 (e.currentTarget as HTMLElement).classList.add('active');
                  renderGlossary(letter, 'letter');
             });
             glossaryAlphabetFilter.appendChild(button);
         });
 
         document.addEventListener('click', showTermPopup);
-        termPopup.addEventListener('click', (e) => {
-            if (e.target.matches('.toggle-def-lang')) {
-                const newLang = e.target.dataset.lang;
+        termPopup.addEventListener('click', (e: Event) => {
+            const tgt = e.target as HTMLElement;
+            if (tgt.matches('.toggle-def-lang')) {
+                const newLang = (tgt as HTMLElement).dataset.lang;
                 if (currentPopupTermData && newLang) {
                     renderPopupContent(newLang);
                 }
@@ -2104,3 +2582,33 @@ async function main() {
 
 main();
 
+/* --- Added for Review Subtabs --- */
+function setupReviewSubtabs() {
+    const tabButtons = document.querySelectorAll(".review-tab");
+    const tabPanels = document.querySelectorAll(".review-tab-panel");
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const target = (btn as HTMLElement).dataset.target;
+
+            tabButtons.forEach(b => b.classList.remove("border-indigo-500","text-indigo-600"));
+            btn.classList.add("border-indigo-500","text-indigo-600");
+
+            tabPanels.forEach(panel => panel.classList.add("hidden"));
+            if (target) document.getElementById(target)?.classList.remove("hidden");
+        });
+    });
+}
+
+function renderSelfAssessmentReview(assessments) {
+    const container = document.getElementById("self-assessment-review-list");
+    if (!container) return;
+    container.innerHTML = "";
+    assessments.forEach(item => {
+        const div = document.createElement("div");
+        div.className="card p-4 rounded-xl";
+        div.innerHTML = `<div class='text-sm text-gray-400 mb-2'>UID: ${item.uid}</div>
+        <p class='font-semibold text-lg mb-3'>${item.question?.en||''}</p>`;
+        container.appendChild(div);
+    });
+}

@@ -10,12 +10,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Auto Body Technician Red Seal exam preparation study guide with quizzes, assessments, and progress tracking.">
+    <meta name="theme-color" content="#c1121f">
     <title>Auto Body Technician - Red Seal Study App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/css/style.css">
-    <!-- Add Content Security Policy for Electron -->
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net/npm/chart.js 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;">
 </head>
 <body class="antialiased font-sans">
 
@@ -125,7 +123,7 @@
                     <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                         <div id="quiz-breadcrumbs" class="font-semibold text-indigo-500"></div>
                         <div class="flex items-center gap-4">
-                            <button id="flag-question-btn" title="Flag for Review" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
+                            <button id="flag-question-btn" title="Flag for Review" aria-label="Flag question for review" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
                                 <svg id="flag-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
                             </button>
                             <div id="quiz-timer" class="font-mono text-lg">00:00</div>
@@ -134,7 +132,7 @@
                     
                     <div id="question-container" class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
                         <div id="english-col" class="ltr relative transition-all duration-300">
-                            <button id="toggle-translation-btn" class="absolute top-0 right-0 p-2 text-slate-400 hover:text-indigo-600 flex items-center gap-1">
+                            <button id="toggle-translation-btn" aria-label="Toggle Arabic translation" class="absolute top-0 right-0 p-2 text-slate-400 hover:text-indigo-600 flex items-center gap-1">
                                 <span class="text-sm">ترجمة</span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                             </button>
@@ -166,7 +164,8 @@
                     <div class="mt-6 pt-6 border-t border-[var(--border-color)] flex justify-between items-center">
                          <button id="end-session-btn" class="btn-secondary">End Session Early</button>
                          <div id="action-buttons" class="flex gap-4">
-                            <button id="submit-answer-btn" class="btn-primary">Submit Answer</button>
+                            <button id="skip-question-btn" class="btn-secondary">Skip</button>
+							<button id="submit-answer-btn" class="btn-primary">Submit Answer</button>
                             <button id="next-question-btn" class="btn-primary hidden">Next Question</button>
                          </div>
                     </div>
@@ -178,37 +177,87 @@
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold">Review Attempted Questions (Study & Quiz)</h2>
                     </div>
-                    <div id="review-filters" class="space-y-4 mb-6 p-4 border rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <input type="text" id="review-search" class="md:col-span-3 p-2 border rounded-md bg-transparent border-gray-500" placeholder="Search questions by text or UID...">
-                        </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                             <div>
-                                <label for="review-filter-status" class="block text-sm font-medium mb-1">Status</label>
-                                <select id="review-filter-status" class="form-field">
-                                    <option value="all">All</option>
-                                    <option value="correct">Correct Only</option>
-                                    <option value="incorrect">Incorrect Only</option>
+                    <!-- 
+                      MODIFICATION: Wrapped the filter container in a <details> tag 
+                      to make it collapsible, as requested.
+                    -->
+                    
+                    <div class="border-b border-gray-200 dark:border-gray-700 mt-2">
+                        <nav class="-mb-px flex space-x-4" aria-label="Review sections">
+                            <button
+                                type="button"
+                                class="review-tab border-b-2 px-3 py-2 text-sm font-medium border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                                data-target="review-attempts-tab"
+                            >
+                                Study &amp; Quiz Attempts
+                            </button>
+                            <button
+                                type="button"
+                                class="review-tab border-b-2 border-transparent px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-300"
+                                data-target="review-assessments-tab"
+                            >
+                                Self-Assessment Attempts
+                            </button>
+                        </nav>
+                    </div>
+
+                    <div id="review-attempts-tab" class="review-tab-panel pt-6">
+<details id="review-filters-container" class="mb-6 border rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                        <summary class="p-4 cursor-pointer font-semibold flex justify-between items-center">
+                            <span>Review Filters</span>
+                            <span class="text-sm text-slate-500 dark:text-slate-400 font-normal">Click to expand/collapse</span>
+                        </summary>
+                        <div id="review-filters" class="space-y-4 p-4 border-t border-[var(--border-color)]">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <input type="text" id="review-search" class="md:col-span-3 p-2 border rounded-md bg-transparent border-gray-500" placeholder="Search questions by text or UID...">
+                            </div>
+                            <!-- 
+                              MODIFICATION: Changed grid-cols-4 to grid-cols-5 to accommodate the new filter.
+                                          Added the new "review-filter-subject" select element.
+                            -->
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                 <div>
+                                    <label for="review-filter-status" class="block text-sm font-medium mb-1">Status</label>
+                                    <select id="review-filter-status" class="form-field">
+                                        <option value="all">All</option>
+                                        <option value="correct">Correct Only</option>
+                                        <option value="incorrect">Incorrect Only</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="review-filter-book" class="block text-sm font-medium mb-1">Book</label>
+                                    <select id="review-filter-book" class="form-field"></select>
+                            </div>
+                            <div>
+                                <label for="review-filter-subject" class="block text-sm font-medium mb-1">Subject/Module</label>
+                                <select id="review-filter-subject" class="form-field">
+                                    <option value="all">All Subjects</option>
                                 </select>
                             </div>
                             <div>
-                                <label for="review-filter-book" class="block text-sm font-medium mb-1">Book</label>
-                                <select id="review-filter-book" class="form-field"></select>
-                            </div>
-                            <div>
                                 <label for="review-filter-mwa" class="block text-sm font-medium mb-1">Category (MWA)</label>
-                                <select id="review-filter-mwa" class="form-field"></select>
-                            </div>
-                            <div class="flex items-end justify-between gap-4">
-                                <div class="flex items-center pt-6">
-                                    <input type="checkbox" id="review-flagged-only" class="h-4 w-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500">
-                                    <label for="review-flagged-only" class="ml-2 block text-sm">Flagged</label>
+                                    <select id="review-filter-mwa" class="form-field"></select>
                                 </div>
-                                <button id="reset-filters-btn" class="btn-secondary h-fit">Reset</button>
+                                <div class="flex items-end justify-between gap-4">
+                                    <div class="flex items-center pt-6">
+                                        <input type="checkbox" id="review-flagged-only" class="h-4 w-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500">
+                                        <label for="review-flagged-only" class="ml-2 block text-sm">Flagged</label>
+                                    </div>
+                                    <button id="reset-filters-btn" class="btn-secondary h-fit">Reset</button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
                     <div id="review-list" class="space-y-3 max-h-[60vh] overflow-y-auto"></div>
+                    </div>
+
+                    <div id="review-assessments-tab" class="review-tab-panel pt-6 hidden">
+                        <p class="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                            Review your self-assessment sessions here. Each question shows your chosen answer and whether it was correct.
+                        </p>
+                        <div id="self-assessment-review-list" class="space-y-3 max-h-[60vh] overflow-y-auto"></div>
+                    </div>
+
                 </div>
             </div>
 
@@ -361,7 +410,7 @@
         <div class="card rounded-xl p-8 w-full max-w-3xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold">Add New Book Wizard</h2>
-                <button id="close-wizard-btn" class="text-3xl leading-none">&times;</button>
+                <button id="close-wizard-btn" aria-label="Close wizard" class="text-3xl leading-none">&times;</button>
             </div>
 
             <div class="mb-6 border-b border-[var(--border-color)] pb-4">
@@ -412,7 +461,7 @@
         <div class="card rounded-xl p-6 md:p-8 w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center mb-4 pb-4 border-b border-[var(--border-color)]">
                 <h2 class="text-2xl font-bold">Glossary of Auto Body Terms</h2>
-                <button id="glossary-close-btn" class="text-3xl font-bold p-2 leading-none hover:text-red-500">&times;</button>
+                <button id="glossary-close-btn" aria-label="Close glossary" class="text-3xl font-bold p-2 leading-none hover:text-red-500">&times;</button>
             </div>
             <div class="mb-4">
                 <input type="search" id="glossary-search-input" placeholder="Search terms in English or Arabic..." class="form-field">
@@ -429,4 +478,3 @@
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
-

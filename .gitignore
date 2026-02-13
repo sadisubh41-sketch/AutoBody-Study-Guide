@@ -1,2 +1,9 @@
 node_modules/
 dist/
+dist-server/
+.env
+.vite/
+.claude/
+nul
+foldertree.txt
+*.bac

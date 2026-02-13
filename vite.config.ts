@@ -1,11 +1,14 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vite'
 
 export default defineConfig({
-  build: {
-    outDir: 'dist'
-  },
+  base: '/',
+  build: { outDir: 'dist' },
   server: {
-    port: 5173,
-    open: true
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   }
-});
+})

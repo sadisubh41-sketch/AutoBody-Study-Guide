@@ -14,3 +14,7 @@
 .card {
   @apply bg-white dark:bg-slate-800 shadow-md border border-gray-200 dark:border-slate-700 p-4 rounded-xl;
 }
+
+
+/* ---- Added for Review Subtabs ---- */
+.review-tab-panel.hidden { display: none; }
